@@ -1,0 +1,10 @@
+node_modules/
+.next/
+dist/
+.git/
+.gitignore
+.env
+npm-debug.log
+docker-compose*.yml
+coverage/
+scripts/debug-auth.mts

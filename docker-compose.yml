@@ -1,0 +1,60 @@
+name: ${COMPOSE_PROJECT_NAME:-doktainer}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: ${COMPOSE_PROJECT_NAME:-doktainer}-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - doktainer_postgres_data:/var/lib/postgresql/data
+    networks:
+      doktainer_internal:
+        aliases:
+          - postgres
+          - postgres-app
+          - doktainer-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  app:
+    image: ${DOKTAINER_IMAGE:-doktainer:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-doktainer}-app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - doktainer_internal
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+      - "${BACKEND_PORT:-4000}:4000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "Promise.all([fetch(''http://127.0.0.1:3000''), fetch(''http://127.0.0.1:4000/health'')]).then(([frontend, backend]) => process.exit(frontend.ok && backend.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+volumes:
+  doktainer_postgres_data:
+
+networks:
+  doktainer_internal:
+    name: ${COMPOSE_PROJECT_NAME:-doktainer}-internal

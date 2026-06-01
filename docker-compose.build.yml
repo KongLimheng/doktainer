@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-4000}
+        NEXT_PUBLIC_PANEL_NAME: ${NEXT_PUBLIC_PANEL_NAME:-DOKTAINER}
+        NEXT_PUBLIC_VERSION: ${NEXT_PUBLIC_VERSION:-unknown}
+        NEXT_PUBLIC_BATCH: ${NEXT_PUBLIC_BATCH:-dev}
+    image: ${DOKTAINER_LOCAL_IMAGE:-doktainer:local}
