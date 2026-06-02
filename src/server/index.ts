@@ -146,7 +146,7 @@ async function start() {
     status: "ok",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    version: process.env.APP_PUBLIC_VERSION || "unknown",
+    version: process.env.NEXT_PUBLIC_VERSION || "unknown",
   }));
 
   // ── API Routes ────────────────────────────────────────
