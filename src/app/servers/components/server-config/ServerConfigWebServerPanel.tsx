@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  AlertTriangle,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import type {
   WebStackComponentStatus,
   ServerConfigSnapshot,
@@ -39,6 +47,10 @@ export default function ServerConfigWebServerPanel({
   const [activeGroup, setActiveGroup] = useState<
     "infrastructure" | "runtime-tools"
   >("infrastructure");
+  const [activeIssueDetail, setActiveIssueDetail] = useState<{
+    label: string;
+    notes: string[];
+  } | null>(null);
 
   const infrastructureComponents = snapshot.webServer.components.filter(
     (component) =>
@@ -55,31 +67,13 @@ export default function ServerConfigWebServerPanel({
       : runtimeToolComponents;
 
   const renderComponentCard = (component: WebStackComponentStatus) => (
-    <div
-      key={component.key}
-      className="card"
-      style={{ padding: 16, display: "grid", gap: 14 }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 12,
-        }}
-      >
-        <div>
+    <div key={component.key} className="card server-config-component-card">
+      <div className="server-config-component-header">
+        <div className="server-config-component-copy">
           <strong style={{ color: "var(--text-primary)", fontSize: 14 }}>
             {component.label}
           </strong>
-          <p
-            style={{
-              marginTop: 6,
-              fontSize: 12,
-              color: "var(--text-muted)",
-              lineHeight: 1.6,
-            }}
-          >
+          <p className="server-config-component-description">
             {component.description}
           </p>
         </div>
@@ -88,11 +82,9 @@ export default function ServerConfigWebServerPanel({
           tone={component.installed ? "success" : "warning"}
         />
       </div>
-      <hr style={{ borderColor: "var(--border)" }} />
+      <hr className="server-config-component-divider" />
 
-      <div
-        style={{ display: "flex", gap: 8, maxHeight: "20px", flexWrap: "wrap" }}
-      >
+      <div className="server-config-badge-list">
         <UserBadge label={component.category} tone="neutral" />
         {component.version ? (
           <UserBadge label={component.version} tone="neutral" />
@@ -108,48 +100,36 @@ export default function ServerConfigWebServerPanel({
         ) : null}
       </div>
 
-      <div
-        style={{ display: "flex", gap: 8, maxHeight: "20px", flexWrap: "wrap" }}
-      >
+      <div className="server-config-badge-list">
         {component.recommendedFor.map((target) => (
           <UserBadge key={target} label={target} tone="neutral" />
         ))}
       </div>
 
       {component.notes.length > 0 ? (
-        <div
-          style={{
-            display: "grid",
-            gap: 6,
-            lineHeight: 1.4,
-            padding: 12,
-            borderRadius: 12,
-            background: "rgba(248, 113, 113, 0.15)",
-            border: "1px solid rgba(248, 113, 113, 0.3)",
-          }}
+        <button
+          type="button"
+          className="server-config-component-issue-summary"
+          onClick={() =>
+            setActiveIssueDetail({
+              label: component.label,
+              notes: component.notes,
+            })
+          }
         >
-          {component.notes.map((note) => (
-            <div
-              key={note}
-              style={{ color: "var(--text-danger)", fontSize: 12 }}
-            >
-              {note}
-            </div>
-          ))}
-        </div>
+          <span className="server-config-component-issue-copy">
+            <AlertTriangle size={13} />
+            <span>
+              {component.notes.length === 1
+                ? "1 issue detected"
+                : `${component.notes.length} issues detected`}
+            </span>
+          </span>
+          <span className="server-config-component-issue-action">Details</span>
+        </button>
       ) : null}
 
-      <hr style={{ borderColor: "var(--border)" }} />
-
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          maxHeight: "20px",
-          padding: "0 0 24px 0",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="server-config-component-actions">
         {component.availableActions.length > 0 ? (
           component.availableActions.map((action) => {
             const actionStyle = getWebStackActionStyle(action);
@@ -192,6 +172,51 @@ export default function ServerConfigWebServerPanel({
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {activeIssueDetail && typeof document !== "undefined"
+        ? createPortal(
+            <div className="server-config-issue-overlay">
+              <div className="card server-config-issue-dialog">
+                <div className="server-config-issue-dialog-header">
+                  <div>
+                    <strong
+                      style={{ color: "var(--text-primary)", fontSize: 15 }}
+                    >
+                      {activeIssueDetail.label} Issues
+                    </strong>
+                    <p
+                      style={{
+                        marginTop: 6,
+                        color: "var(--text-muted)",
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Service information returned by the current server
+                      snapshot.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveIssueDetail(null)}
+                    aria-label="Close issue details"
+                    className="server-config-issue-close"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="server-config-issue-list">
+                  {activeIssueDetail.notes.map((note) => (
+                    <div key={note} className="server-config-issue-note">
+                      {note}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
       <div className="card" style={{ padding: 18, display: "grid", gap: 14 }}>
         <div
           style={{
@@ -303,22 +328,11 @@ export default function ServerConfigWebServerPanel({
           />
         </div>
         {snapshot.webServer.notes.length > 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gap: 6,
-              padding: 12,
-              borderRadius: 12,
-              background: "rgba(15,23,42,0.18)",
-              border: "1px solid rgba(148,163,184,0.14)",
-            }}
-          >
+          <div className="server-config-readiness-notices">
             {snapshot.webServer.notes.map((note) => (
-              <div
-                key={note}
-                style={{ color: "var(--text-muted)", fontSize: 12 }}
-              >
-                {note}
+              <div key={note} className="server-config-readiness-notice">
+                <AlertTriangle size={13} />
+                <span>{note}</span>
               </div>
             ))}
           </div>
@@ -437,13 +451,7 @@ export default function ServerConfigWebServerPanel({
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 16,
-        }}
-      >
+      <div className="server-config-component-grid">
         {visibleComponents.map((component) => renderComponentCard(component))}
       </div>
     </div>

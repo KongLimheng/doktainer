@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Eye,
@@ -638,19 +639,20 @@ export default function ServerConfigModal({
           gap: 18,
         }}
       >
-        {pendingConfirm ? (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(3,7,18,0.58)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 20,
-              zIndex: 1002,
-            }}
-          >
+        {pendingConfirm && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(3,7,18,0.58)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 20,
+                  zIndex: 1002,
+                }}
+              >
             <div
               className="card"
               style={{
@@ -895,8 +897,10 @@ export default function ServerConfigModal({
                 </button>
               </div>
             </div>
-          </div>
-        ) : null}
+              </div>,
+              document.body,
+            )
+          : null}
 
         <div
           style={{

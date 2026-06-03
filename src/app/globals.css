@@ -407,9 +407,223 @@ body {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.25;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.server-config-component-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  gap: 16px;
+}
+
+.server-config-component-card {
+  min-width: 0;
+  min-height: 100%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.server-config-component-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.server-config-component-copy {
+  min-width: 0;
+}
+
+.server-config-component-description {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.server-config-component-divider {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.server-config-badge-list {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.server-config-readiness-notices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 8px;
+}
+
+.server-config-readiness-notice {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.08);
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.server-config-readiness-notice svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #f59e0b;
+}
+
+.server-config-readiness-notice span {
+  min-width: 0;
+}
+
+.server-config-component-issue-summary {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: #ef4444;
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.server-config-component-issue-summary:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.server-config-component-issue-copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.server-config-component-issue-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-config-component-issue-action {
+  flex-shrink: 0;
+  color: #dc2626;
+  font-size: 11px;
+}
+
+.server-config-issue-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1003;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 7, 18, 0.58);
+}
+
+.server-config-issue-dialog {
+  width: min(520px, 100%);
+  max-height: min(70vh, 560px);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.server-config-issue-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.server-config-issue-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.16);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.server-config-issue-close:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.server-config-issue-list {
+  display: grid;
+  gap: 8px;
+}
+
+.server-config-issue-note {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--text-danger);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.server-config-component-actions {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.server-config-component-actions .btn {
+  min-width: 94px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .server-config-component-card {
+    padding: 14px;
+  }
+
+  .server-config-component-header {
+    grid-template-columns: 1fr;
+  }
+
+  .server-config-component-header > .ui-badge {
+    justify-self: start;
+  }
+
+  .server-config-component-actions .btn {
+    flex: 1 1 140px;
+  }
 }
 
 /* Progress bars */

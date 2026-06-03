@@ -73,6 +73,7 @@ export function UserBadge({
   return (
     <span
       className="ui-badge"
+      title={label}
       style={{
         color: style.color,
         background: style.background,
