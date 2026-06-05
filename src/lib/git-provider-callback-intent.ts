@@ -1,4 +1,5 @@
 import type { GitProviderType } from "@/lib/api";
+import { createClientId } from "@/lib/random-id";
 
 const CALLBACK_INTENT_TTL_SECONDS = 15 * 60;
 
@@ -25,10 +26,7 @@ export function markGitProviderCallbackIntent(provider: GitProviderType): void {
     return;
   }
 
-  const nonce =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const nonce = createClientId();
 
   document.cookie = `${getCallbackIntentCookieName(provider)}=${encodeURIComponent(nonce)}; ${buildCookieAttributes(provider).join("; ")}`;
 }

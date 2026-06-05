@@ -11,6 +11,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { terminal as terminalApi } from "@/lib/api";
+import { createClientId } from "@/lib/random-id";
 import { sanitizeTerminalStreamChunk } from "@/lib/terminal-output";
 import type {
   TerminalCommandPreset,
@@ -23,7 +24,12 @@ interface TerminalTabPanelProps {
   terminal: TerminalTabData;
 }
 
-type TerminalStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+type TerminalStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 type TerminalSender = (data: string) => boolean;
 type StoredTerminalSession = {
   id: string;
@@ -46,17 +52,17 @@ const summaryToneColor: Record<
   cyan: "var(--accent-cyan)",
 };
 
-const historyClass: Record<TerminalTabData["history"][number]["status"], string> =
-  {
-    Completed: "badge-online",
-    Running: "badge-warning",
-    Failed: "badge-danger",
-  };
+const historyClass: Record<
+  TerminalTabData["history"][number]["status"],
+  string
+> = {
+  Completed: "badge-online",
+  Running: "badge-warning",
+  Failed: "badge-danger",
+};
 
 function presetTone(preset: TerminalCommandPreset) {
-  return preset.tone === "warning"
-    ? "rgba(245,158,11,0.1)"
-    : "var(--bg-input)";
+  return preset.tone === "warning" ? "rgba(245,158,11,0.1)" : "var(--bg-input)";
 }
 
 function formatTime(date: Date) {
@@ -75,12 +81,8 @@ function createSessionId(terminal: TerminalTabData) {
   const safeSessionTarget = terminal.execTarget
     .replace(/[^a-zA-Z0-9_-]/g, "")
     .slice(0, 72);
-  const suffix =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  return `container-${safeSessionTarget}-${suffix}`.slice(0, 128);
+  return `container-${safeSessionTarget}-${createClientId()}`.slice(0, 128);
 }
 
 function getStorageId(terminal: TerminalTabData) {
@@ -93,7 +95,9 @@ function readStoredSessions(): Record<string, StoredTerminalSession> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, StoredTerminalSession>)
       : {};
   } catch {
@@ -348,9 +352,7 @@ function ContainerTerminalPane({
       ws.onopen = () => {
         onStatusChange("connected");
         onSenderChange(sendInput);
-        enqueueTerminalOutput(
-          "\x1b[32mSSH connection established\x1b[0m\r\n",
-        );
+        enqueueTerminalOutput("\x1b[32mSSH connection established\x1b[0m\r\n");
         enqueueTerminalOutput(
           `\x1b[36mOpening container shell: ${terminal.execTarget}\x1b[0m\r\n`,
         );
@@ -489,9 +491,12 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
   const [sessionHistory, setSessionHistory] = useState<TerminalSessionEvent[]>(
     terminal.history,
   );
-  const handleSenderChange = useCallback((nextSender: TerminalSender | null) => {
-    setSender(() => nextSender);
-  }, []);
+  const handleSenderChange = useCallback(
+    (nextSender: TerminalSender | null) => {
+      setSender(() => nextSender);
+    },
+    [],
+  );
   const handleSessionInitialized = useCallback(() => {
     writeStoredSession(storageId, { ...session, initialized: true });
   }, [session, storageId]);
@@ -609,13 +614,15 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
         title="Container Terminal"
         action={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className={`ui-badge ${
-              status === "connected"
-                ? "badge-online"
-                : status === "error"
-                  ? "badge-danger"
-                  : "badge-warning"
-            }`}>
+            <span
+              className={`ui-badge ${
+                status === "connected"
+                  ? "badge-online"
+                  : status === "error"
+                    ? "badge-danger"
+                    : "badge-warning"
+              }`}
+            >
               {status === "connecting" ? (
                 <Loader2 size={12} className="animate-spin" />
               ) : null}
@@ -667,10 +674,14 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
                 padding: 24,
               }}
             >
-              <TerminalSquare size={30} style={{ color: "var(--accent-yellow)" }} />
+              <TerminalSquare
+                size={30}
+                style={{ color: "var(--accent-yellow)" }}
+              />
               <strong>Container terminal is unavailable</strong>
               <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                Start this container first, then reconnect to open an interactive shell.
+                Start this container first, then reconnect to open an
+                interactive shell.
               </span>
             </div>
           )}
@@ -705,7 +716,10 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
                   borderRadius: 7,
                   background: presetTone(preset),
                   padding: 11,
-                  cursor: sender && status === "connected" ? "pointer" : "not-allowed",
+                  cursor:
+                    sender && status === "connected"
+                      ? "pointer"
+                      : "not-allowed",
                   opacity: sender && status === "connected" ? 1 : 0.62,
                 }}
               >
@@ -772,9 +786,7 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
                   fontSize: 12,
                 }}
               >
-                <span style={{ color: "var(--text-muted)" }}>
-                  {item.label}
-                </span>
+                <span style={{ color: "var(--text-muted)" }}>{item.label}</span>
                 <span
                   style={{
                     color: "var(--text-primary)",
@@ -834,7 +846,8 @@ export default function TerminalTabPanel({ terminal }: TerminalTabPanelProps) {
                 {sessionHistory.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ color: "var(--text-muted)" }}>
-                      Preset commands executed in this page session will appear here.
+                      Preset commands executed in this page session will appear
+                      here.
                     </td>
                   </tr>
                 ) : null}

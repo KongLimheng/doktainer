@@ -31,6 +31,7 @@ import {
   normalizeNotificationActionKeys,
   NOTIFICATION_ACTION_OPTIONS,
 } from "@/app/notifications/components/notification-actions";
+import { createClientId } from "@/lib/random-id";
 import type {
   EditableNotificationSettings,
   NotificationProviderItem,
@@ -153,10 +154,7 @@ function createProvider(
   type: NotificationProviderKind,
 ): NotificationProviderItem {
   return {
-    id:
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `provider-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: createClientId("provider"),
     type,
     name:
       PROVIDER_OPTIONS.find((item) => item.type === type)?.label ||

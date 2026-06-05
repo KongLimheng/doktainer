@@ -15,6 +15,7 @@ import {
   terminal as terminalApi,
   Server as ServerType,
 } from "@/lib/api";
+import { createClientId } from "@/lib/random-id";
 import { sanitizeTerminalStreamChunk } from "@/lib/terminal-output";
 import { useSearchParams } from "next/navigation";
 
@@ -488,7 +489,7 @@ function TerminalPageContent() {
         const id = `${serverId}-${Date.now()}`;
         const tab: Tab = {
           id,
-          sessionId: crypto.randomUUID(),
+          sessionId: createClientId(),
           serverId,
           serverName: name,
           serverIp: ip,

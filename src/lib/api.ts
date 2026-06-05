@@ -35,16 +35,7 @@ function resolveRuntimeOrigin(protocol: "http" | "ws") {
     return null;
   }
 
-  const scheme =
-    protocol === "ws"
-      ? window.location.protocol === "https:"
-        ? "wss"
-        : "ws"
-      : window.location.protocol === "https:"
-        ? "https"
-        : "http";
-
-  return `${scheme}://${window.location.hostname}:${DEFAULT_API_PORT}`;
+  return `ws://${window.location.hostname}:${DEFAULT_API_PORT}`;
 }
 
 export function getApiBaseUrl() {
@@ -54,12 +45,8 @@ export function getApiBaseUrl() {
   );
 }
 
-function getWsBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_WS_URL ||
-    resolveRuntimeOrigin("ws") ||
-    `ws://localhost:${DEFAULT_API_PORT}`
-  );
+function getWsBaseUrl(): string | undefined {
+  return process.env.NEXT_PUBLIC_WS_URL || undefined;
 }
 
 export function getHealthUrl() {
