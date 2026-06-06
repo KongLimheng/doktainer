@@ -30,14 +30,6 @@ function getBrowserHttpOrigin() {
   return window.location.origin;
 }
 
-function resolveRuntimeOrigin(protocol: "http" | "ws") {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return `ws://${window.location.hostname}:${DEFAULT_API_PORT}`;
-}
-
 export function getApiBaseUrl() {
   return (
     process.env.NEXT_PUBLIC_API_URL ||
@@ -513,6 +505,81 @@ export interface GitProviderVerifyInput extends GitProviderInput {
   id?: string;
 }
 
+type ApiErrorPayload = {
+  error?: unknown;
+  message?: unknown;
+  [key: string]: unknown;
+};
+
+function stringifyApiErrorValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildResponseFallbackMessage(response: Response, fallback: string) {
+  if (response.status >= 500) {
+    return "Server returned an internal error. Please try again or check the backend logs.";
+  }
+
+  if (response.status === 404) {
+    return "Requested resource was not found.";
+  }
+
+  return fallback;
+}
+
+async function readJsonResponse<T>(
+  response: Response,
+  fallbackMessage = "Request failed",
+): Promise<T> {
+  const text = await response.text();
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    if (response.ok) {
+      return {} as T;
+    }
+
+    throw new Error(buildResponseFallbackMessage(response, fallbackMessage));
+  }
+
+  try {
+    return JSON.parse(trimmedText) as T;
+  } catch {
+    throw new Error(buildResponseFallbackMessage(response, fallbackMessage));
+  }
+}
+
+async function readApiErrorMessage(
+  response: Response,
+  fallbackMessage = "Request failed",
+): Promise<string> {
+  try {
+    const payload = await readJsonResponse<ApiErrorPayload>(
+      response,
+      fallbackMessage,
+    );
+    const message =
+      stringifyApiErrorValue(payload.error) ||
+      stringifyApiErrorValue(payload.message);
+
+    return message || buildResponseFallbackMessage(response, fallbackMessage);
+  } catch (error) {
+    return error instanceof Error ? error.message : fallbackMessage;
+  }
+}
+
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
 async function request<T>(
@@ -521,17 +588,17 @@ async function request<T>(
   config?: { timeoutMs?: number },
 ): Promise<T> {
   const res = await requestRaw(path, options, config);
-  const json = await res.json();
+  const json = await readJsonResponse<ApiErrorPayload & T>(res);
 
   if (!res.ok) {
     throw new Error(
-      typeof json.error === "string"
-        ? json.error
-        : JSON.stringify(json.error) || "Request failed",
+      stringifyApiErrorValue(json.error) ||
+        stringifyApiErrorValue(json.message) ||
+        buildResponseFallbackMessage(res, "Request failed"),
     );
   }
 
-  return json;
+  return json as T;
 }
 
 async function requestRaw(
@@ -1649,17 +1716,12 @@ export const containers = {
     });
 
     if (!response.ok) {
-      let message = "Failed to open process log stream";
-      try {
-        const payload = await response.json();
-        message =
-          typeof payload.error === "string"
-            ? payload.error
-            : JSON.stringify(payload.error) || message;
-      } catch {
-        // Keep the fallback message when the stream error body is not JSON.
-      }
-      throw new Error(message);
+      throw new Error(
+        await readApiErrorMessage(
+          response,
+          "Failed to open process log stream",
+        ),
+      );
     }
 
     const reader = response.body?.getReader();
@@ -2541,8 +2603,7 @@ export const backups = {
     );
 
     if (!res.ok) {
-      const json = (await res.json()) as { error?: string };
-      throw new Error(json.error || "Download failed");
+      throw new Error(await readApiErrorMessage(res, "Download failed"));
     }
 
     const disposition = res.headers.get("content-disposition") || "";
