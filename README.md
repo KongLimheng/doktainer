@@ -73,7 +73,7 @@ Doktainer is intended for teams or individuals who want to own their own deploym
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/DoktainerApp/doktainer
+git clone https://github.com/DoktainerApp/doktainer.git
 cd doktainer
 ```
 
@@ -244,8 +244,8 @@ JWT_SECRET=replace-this-with-a-secure-32-char-secret
 ENCRYPTION_KEY=replace-this-with-a-secure-32-char-key
 
 NEXT_PUBLIC_PANEL_NAME=DOKTAINER
-NEXT_PUBLIC_VERSION=v0.1.0
-NEXT_PUBLIC_BATCH=Batch-20260601
+NEXT_PUBLIC_VERSION=v0.1.1
+NEXT_PUBLIC_BATCH=Batch-20260606
 NEXT_PUBLIC_API_PORT=4000
 ```
 
