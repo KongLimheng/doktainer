@@ -5,12 +5,14 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import SearchField from "@/components/SearchField";
+import SearchableSelect from "@/components/SearchableSelect";
 import {
   Boxes,
   Package,
@@ -34,7 +36,11 @@ import {
   AppTemplate,
   DockerRuntimeStatus,
   apps as appsApi,
+  networks as networksApi,
+  projectsApi,
   servers as serversApi,
+  NetworkRecord,
+  ProjectRecord,
   Server,
 } from "@/lib/api";
 import {
@@ -555,17 +561,24 @@ function InstallModal({
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<InstallMode>(initialMode);
   const [serverId, setServerId] = useState("");
+  const [environmentId, setEnvironmentId] = useState("");
   const [presetId, setPresetId] = useState(template?.presets?.[0]?.id ?? "");
   const [appName, setAppName] = useState("");
   const [imageName, setImageName] = useState("");
   const [imageTag, setImageTag] = useState("");
   const [containerName, setContainerName] = useState("");
   const [network, setNetwork] = useState("bridge");
+  const [networkId, setNetworkId] = useState("");
   const [restartPolicy, setRestartPolicy] = useState("unless-stopped");
   const [command, setCommand] = useState("");
   const [ports, setPorts] = useState<PortMapping[]>([]);
   const [envVars, setEnvVars] = useState<EnvVarRow[]>([]);
   const [volumes, setVolumes] = useState<VolumeMapping[]>([]);
+  const [projectOptions, setProjectOptions] = useState<ProjectRecord[]>([]);
+  const [networkOptions, setNetworkOptions] = useState<NetworkRecord[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [networksLoading, setNetworksLoading] = useState(false);
+  const [networksError, setNetworksError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dockerStatus, setDockerStatus] = useState<DockerRuntimeStatus | null>(
@@ -581,6 +594,59 @@ function InstallModal({
 
   const visual = getTemplateVisual(template);
   const hasTemplate = Boolean(template);
+  const availableEnvironments = useMemo(
+    () =>
+      projectOptions.flatMap((project) =>
+        project.environments
+          .filter((environment) => environment.serverId === serverId)
+          .map((environment) => ({
+            id: environment.id,
+            label: `${project.name} / ${environment.name}`,
+            description: `${environment.kind.toLowerCase()} on ${environment.server.name}`,
+          })),
+      ),
+    [projectOptions, serverId],
+  );
+  const environmentSelectOptions = useMemo(
+    () => [
+      {
+        value: "",
+        label: projectsLoading
+          ? "Loading environments..."
+          : availableEnvironments.length > 0
+            ? "No environment selected"
+            : "No environment mapped to this server",
+      },
+      ...availableEnvironments.map((environment) => ({
+        value: environment.id,
+        label: environment.label,
+        description: environment.description,
+        keywords: `${environment.label} ${environment.description}`,
+      })),
+    ],
+    [availableEnvironments, projectsLoading],
+  );
+  const networkSelectOptions = useMemo(
+    () => [
+      {
+        value: "",
+        label: networksLoading
+          ? "Loading networks..."
+          : network.trim()
+            ? `Template/default network (${network.trim()})`
+            : "Bridge default / no explicit network",
+      },
+      ...networkOptions.map((networkOption) => ({
+        value: networkOption.id,
+        label: networkOption.name,
+        description: networkOption.driver,
+        keywords: `${networkOption.name} ${networkOption.driver} ${
+          networkOption.scope
+        } ${networkOption.subnet ?? ""} ${networkOption.gateway ?? ""}`,
+      })),
+    ],
+    [network, networkOptions, networksLoading],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -603,12 +669,85 @@ function InstallModal({
     setImageTag(defaults.tag);
     setContainerName(defaults.containerName);
     setNetwork(defaults.network);
+    setNetworkId("");
     setRestartPolicy(defaults.restartPolicy);
     setCommand(defaults.command);
     setPorts(defaults.ports);
     setEnvVars(defaults.envVars);
     setVolumes(defaults.volumes);
   }, [presetId, template]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    projectsApi
+      .list()
+      .then((response) => {
+        if (!isActive) return;
+        setProjectOptions(response.data ?? []);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setProjectOptions([]);
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setProjectsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!serverId) {
+      queueMicrotask(() => {
+        setNetworkOptions([]);
+        setNetworksError("");
+        setNetworkId("");
+      });
+      return;
+    }
+
+    let isActive = true;
+
+    queueMicrotask(() => {
+      if (!isActive) return;
+      setNetworksLoading(true);
+      setNetworksError("");
+    });
+    networksApi
+      .list(serverId)
+      .then((response) => {
+        if (!isActive) return;
+        const networks = response.data ?? [];
+        setNetworkOptions(networks);
+        setNetworkId((current) =>
+          current && networks.some((item) => item.id === current)
+            ? current
+            : "",
+        );
+      })
+      .catch((err: unknown) => {
+        if (!isActive) return;
+        setNetworkOptions([]);
+        setNetworkId("");
+        setNetworksError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load available networks",
+        );
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setNetworksLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [serverId]);
 
   const validateDockerStatus = useCallback(async (targetServerId: string) => {
     setDockerStatusLoading(true);
@@ -797,6 +936,7 @@ function InstallModal({
         templateSnapshot:
           mode === "template" && template ? template : undefined,
         serverId,
+        environmentId: environmentId || undefined,
         appName: appName.trim(),
         image: imageName.trim(),
         tag: imageTag.trim() || undefined,
@@ -804,7 +944,8 @@ function InstallModal({
         ports: serializePorts(ports),
         env: serializeEnv(envVars),
         volumes: serializeVolumes(volumes),
-        network: network.trim() || undefined,
+        networkId: networkId || undefined,
+        network: networkId ? undefined : network.trim() || undefined,
         restartPolicy,
         command: command.trim() || undefined,
       });
@@ -1103,6 +1244,8 @@ function InstallModal({
                 value={serverId}
                 onChange={(e) => {
                   setServerId(e.target.value);
+                  setEnvironmentId("");
+                  setNetworkId("");
                   setDockerNotice("");
                 }}
                 required
@@ -1116,6 +1259,33 @@ function InstallModal({
                 ))}
               </select>
             </div>
+            <div>
+              <InputLabel>Project Environment *</InputLabel>
+              <SearchableSelect
+                value={environmentId}
+                options={environmentSelectOptions}
+                onChange={setEnvironmentId}
+                placeholder={
+                  projectsLoading
+                    ? "Loading environments..."
+                    : availableEnvironments.length > 0
+                      ? "No environment selected"
+                      : "No environment mapped to this server"
+                }
+                searchPlaceholder="Search environment..."
+                emptyText="No environment found"
+                disabled={!serverId || projectsLoading}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 14,
+            }}
+          >
             <div>
               <InputLabel>App Name *</InputLabel>
               <input
@@ -1137,14 +1307,34 @@ function InstallModal({
               />
             </div>
             <div>
-              <InputLabel>Network</InputLabel>
-              <input
-                className="input"
-                value={network}
-                onChange={(e) => setNetwork(e.target.value)}
-                placeholder="bridge"
-                style={{ width: "100%" }}
+              <InputLabel>Docker Network</InputLabel>
+              <SearchableSelect
+                value={networkId}
+                options={networkSelectOptions}
+                onChange={setNetworkId}
+                placeholder={
+                  networksLoading
+                    ? "Loading networks..."
+                    : network.trim()
+                      ? `Template/default network (${network.trim()})`
+                      : "Bridge default / no explicit network"
+                }
+                searchPlaceholder="Search network..."
+                emptyText="No network found"
+                disabled={!serverId || networksLoading}
               />
+              {networksError ? (
+                <p
+                  style={{
+                    marginTop: 6,
+                    fontSize: 11,
+                    color: "#fca5a5",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {networksError}
+                </p>
+              ) : null}
             </div>
             <div>
               <InputLabel>Docker Image *</InputLabel>

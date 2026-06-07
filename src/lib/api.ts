@@ -2412,6 +2412,17 @@ export interface AppInstall {
   error: string | null;
   installedAt: string;
   server?: { name: string; ip: string };
+  environment?: {
+    containerId: string;
+    id: string;
+    projectId: string;
+    name: string;
+    project?: {
+      id: string;
+      name: string;
+      slug: string;
+    };
+  } | null;
 }
 
 export interface AppInstallRuntimeDetails {
@@ -2483,6 +2494,7 @@ export const apps = {
     templateSnapshot?: AppTemplate;
     serverId: string;
     environmentId?: string;
+    networkId?: string;
     appName?: string;
     image?: string;
     tag?: string;

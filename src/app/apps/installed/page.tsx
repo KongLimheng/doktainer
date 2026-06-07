@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
+  ChevronDown,
   CheckCircle,
+  Container,
   Cpu,
   HardDrive,
   Loader2,
@@ -16,11 +18,9 @@ import {
   ScrollText,
   Server as ServerIcon,
   Square,
-  Terminal,
   Trash2,
   Wrench,
   X,
-  XCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmActionDialog from "@/components/ConfirmActionDialog";
@@ -269,6 +269,8 @@ function InstallOperationsModal({
   const [error, setError] = useState("");
   const [acting, setActing] = useState<Record<string, boolean>>({});
   const contentViewportRef = useRef<HTMLDivElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -295,12 +297,29 @@ function InstallOperationsModal({
     void loadRuntime();
   }, [loadRuntime]);
 
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        actionsMenuRef.current &&
+        !actionsMenuRef.current.contains(event.target as Node)
+      ) {
+        setActionsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [actionsMenuOpen]);
+
   const handleLifecycle = async (action: "start" | "stop" | "restart") => {
     if (!install.containerName) {
       onToast({
         tone: "error",
         title: "Installed Apps",
-        message: "Container runtime belum ditemukan untuk app ini",
+        message:
+          "Container name is not available for this app install. Lifecycle actions cannot be performed.",
         showProgress: true,
       });
       return;
@@ -314,7 +333,7 @@ function InstallOperationsModal({
       onToast({
         tone: "success",
         title: "Installed Apps",
-        message: `${install.appName} ${action} berhasil dijalankan`,
+        message: `${install.appName} ${action} successfully executed`,
         showProgress: true,
       });
     } catch (err: unknown) {
@@ -338,7 +357,7 @@ function InstallOperationsModal({
       onToast({
         tone: "success",
         title: "Installed Apps",
-        message: `${install.appName} berhasil direbuild`,
+        message: `${install.appName} successfully rebuilt`,
         showProgress: true,
       });
     } catch (err: unknown) {
@@ -354,31 +373,47 @@ function InstallOperationsModal({
   };
 
   const requestRebuildConfirm = () => {
+    setActionsMenuOpen(false);
     onRequestConfirm({
       title: "Rebuild Installed App",
       description: `Rebuild app "${install.appName}" sekarang?`,
       confirmLabel: "Rebuild App",
       tone: "warning",
-      note: "Container app ini akan dihentikan, dihapus, lalu dijalankan ulang. Doktainer akan mencoba menarik image terbaru terlebih dahulu jika tersedia di registry.",
+      note: "Rebuilding will stop the app if it's currently running, and apply any changes from the original app template or the last successful build. This is useful if the app is not working correctly or if you have made changes to the app's source that you want to apply.",
       onConfirm: () => {
         void handleRebuild();
       },
     });
   };
 
-  const handleOpenContainers = () => {
-    storeServerSelection("containers", install.serverId);
-    router.push("/containers");
+  const handleOpenEnvironment = () => {
+    setActionsMenuOpen(false);
+
+    if (!install.environment) {
+      onToast({
+        tone: "error",
+        title: "Installed Apps",
+        message:
+          "This app install does not have an associated environment. It might have been installed before this feature was implemented, or there was an issue linking the environment during installation.",
+        showProgress: true,
+      });
+      return;
+    }
+
+    router.push(
+      `/projects/${install.environment.projectId}/environments/${install.environment.id}/containers/${install.environment.containerId}`,
+    );
     onClose();
   };
 
-  const handleOpenTerminal = () => {
-    const encodedName = encodeURIComponent(install.server?.name ?? "Server");
-    const encodedIp = encodeURIComponent(install.server?.ip ?? "");
-    router.push(
-      `/terminal?serverId=${install.serverId}&name=${encodedName}&ip=${encodedIp}`,
-    );
-    onClose();
+  const handleMenuLifecycle = (action: "start" | "stop" | "restart") => {
+    setActionsMenuOpen(false);
+    void handleLifecycle(action);
+  };
+
+  const handleMenuRemove = () => {
+    setActionsMenuOpen(false);
+    void onRemove(install);
   };
 
   const currentStatus = detail?.container.status ?? install.status;
@@ -493,20 +528,6 @@ function InstallOperationsModal({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={handleOpenContainers}
-            >
-              <Boxes size={12} /> Containers
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={handleOpenTerminal}
-            >
-              <Terminal size={12} /> Terminal
-            </button>
-            <button
               onClick={onClose}
               style={{
                 background: "none",
@@ -521,6 +542,7 @@ function InstallOperationsModal({
         </div>
 
         <div
+          className="installed-app-ops-toolbar"
           style={{
             display: "flex",
             gap: 8,
@@ -528,35 +550,82 @@ function InstallOperationsModal({
             borderBottom: "1px solid var(--border)",
             background: "rgba(255,255,255,0.02)",
             flexWrap: "wrap",
+            alignItems: "center",
           }}
         >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="btn btn-ghost"
-              style={{
-                fontSize: 12,
-                border:
-                  activeTab === tab.id
-                    ? "1px solid rgba(59,130,246,0.35)"
-                    : "1px solid transparent",
-                background:
-                  activeTab === tab.id ? "rgba(59,130,246,0.12)" : undefined,
-                color: activeTab === tab.id ? "#3b82f6" : undefined,
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <div
-            style={{
-              marginLeft: "auto",
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
+          <style>{`
+            .installed-app-ops-tabs {
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+            }
+
+            .installed-app-ops-actions {
+              margin-left: auto;
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+            }
+
+            .installed-app-ops-menu {
+              right: 0;
+              width: 190px;
+            }
+
+            @media (max-width: 640px) {
+              .installed-app-ops-toolbar {
+                padding: 12px 14px !important;
+                align-items: stretch !important;
+              }
+
+              .installed-app-ops-tabs,
+              .installed-app-ops-actions {
+                width: 100%;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+
+              .installed-app-ops-actions {
+                margin-left: 0;
+              }
+
+              .installed-app-ops-tabs > button,
+              .installed-app-ops-actions button {
+                width: 100%;
+                min-width: 0;
+                justify-content: center;
+              }
+
+              .installed-app-ops-menu {
+                left: 0;
+                right: auto;
+                width: 100%;
+                min-width: 190px;
+              }
+            }
+          `}</style>
+          <div className="installed-app-ops-tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="btn btn-ghost"
+                style={{
+                  fontSize: 12,
+                  border:
+                    activeTab === tab.id
+                      ? "1px solid rgba(59,130,246,0.35)"
+                      : "1px solid transparent",
+                  background:
+                    activeTab === tab.id ? "rgba(59,130,246,0.12)" : undefined,
+                  color: activeTab === tab.id ? "#3b82f6" : undefined,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="installed-app-ops-actions">
             <button
               className="btn btn-ghost"
               style={{ fontSize: 12 }}
@@ -568,76 +637,157 @@ function InstallOperationsModal({
               ) : (
                 <RefreshCw size={12} />
               )}
-              Refresh
+              Sync
             </button>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={requestRebuildConfirm}
-              disabled={acting.rebuild}
+            <div
+              ref={actionsMenuRef}
+              style={{ position: "relative", display: "inline-flex" }}
             >
-              {acting.rebuild ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Wrench size={12} />
-              )}
-              Rebuild
-            </button>
-            {detail?.container ? (
-              <>
-                {detail.container.status === "STOPPED" ||
-                detail.container.status === "ERROR" ? (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ fontSize: 12, color: "#10b981" }}
-                    onClick={() => void handleLifecycle("start")}
-                    disabled={acting.start}
-                  >
-                    {acting.start ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Play size={12} />
-                    )}
-                    Start
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ fontSize: 12 }}
-                    onClick={() => void handleLifecycle("stop")}
-                    disabled={acting.stop}
-                  >
-                    {acting.stop ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Square size={12} />
-                    )}
-                    Stop
-                  </button>
-                )}
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: 12 }}
-                  onClick={() => void handleLifecycle("restart")}
-                  disabled={acting.restart}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ fontSize: 12 }}
+                onClick={() => setActionsMenuOpen((open) => !open)}
+                aria-expanded={actionsMenuOpen}
+                aria-haspopup="menu"
+              >
+                <Cpu size={12} />
+                Manage
+                <ChevronDown size={13} />
+              </button>
+              {actionsMenuOpen ? (
+                <div
+                  role="menu"
+                  className="card installed-app-ops-menu"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    zIndex: 2300,
+                    padding: 6,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    boxShadow: "0 18px 40px rgba(2, 6, 23, 0.22)",
+                  }}
                 >
-                  {acting.restart ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <RotateCcw size={12} />
-                  )}
-                  Restart
-                </button>
-              </>
-            ) : null}
-            <button
-              className="btn btn-danger"
-              style={{ fontSize: 12 }}
-              onClick={() => void onRemove(install)}
-              disabled={acting.remove}
-            >
-              <Trash2 size={12} /> Remove App
-            </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="btn btn-ghost"
+                    onClick={handleOpenEnvironment}
+                    style={{
+                      justifyContent: "flex-start",
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    <Container
+                      size={14}
+                      style={{ color: "var(--accent-blue)" }}
+                    />
+                    Environment
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="btn btn-ghost"
+                    onClick={requestRebuildConfirm}
+                    disabled={acting.rebuild}
+                    style={{
+                      justifyContent: "flex-start",
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    {acting.rebuild ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Wrench size={14} style={{ color: "#a78bfa" }} />
+                    )}
+                    Rebuild
+                  </button>
+                  {detail?.container ? (
+                    <>
+                      {detail.container.status === "STOPPED" ||
+                      detail.container.status === "ERROR" ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="btn btn-ghost"
+                          onClick={() => handleMenuLifecycle("start")}
+                          disabled={acting.start}
+                          style={{
+                            justifyContent: "flex-start",
+                            fontSize: 12,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {acting.start ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Play size={14} style={{ color: "#10b981" }} />
+                          )}
+                          Start
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="btn btn-ghost"
+                          onClick={() => handleMenuLifecycle("stop")}
+                          disabled={acting.stop}
+                          style={{
+                            justifyContent: "flex-start",
+                            fontSize: 12,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {acting.stop ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Square size={14} style={{ color: "#94a3b8" }} />
+                          )}
+                          Stop
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-ghost"
+                        onClick={() => handleMenuLifecycle("restart")}
+                        disabled={acting.restart}
+                        style={{
+                          justifyContent: "flex-start",
+                          fontSize: 12,
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {acting.restart ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <RotateCcw size={14} style={{ color: "#60a5fa" }} />
+                        )}
+                        Restart
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="btn btn-ghost"
+                    onClick={handleMenuRemove}
+                    disabled={acting.remove}
+                    style={{
+                      justifyContent: "flex-start",
+                      fontSize: 12,
+                      color: "#ef4444",
+                    }}
+                  >
+                    <Trash2 size={14} /> Remove App
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -974,7 +1124,7 @@ function InstallOperationsModal({
                       title="Docker inspect failed"
                       message={
                         diagnostics.inspect.error ||
-                        "Payload docker inspect tidak bisa dibaca untuk app ini."
+                        "Docker inspect payload is not available for this app."
                       }
                     />
                   ) : null}
@@ -1230,9 +1380,21 @@ export default function InstalledAppsPage() {
     setModalTab(tab);
   };
 
-  const openContainersPage = (install: AppInstall) => {
-    storeServerSelection("containers", install.serverId);
-    router.push("/containers");
+  const openInstallEnvironment = (install: AppInstall) => {
+    if (!install.environment) {
+      pushToast({
+        tone: "error",
+        title: "Installed Apps",
+        message:
+          "This app is not yet connected to a Project Environment. Please select an environment during reinstallation or check the related container in Projects.",
+        showProgress: true,
+      });
+      return;
+    }
+
+    router.push(
+      `/projects/${install.environment.projectId}/environments/${install.environment.id}/containers/${install.environment.containerId}`,
+    );
   };
 
   const runningCount = installs.filter(
@@ -1584,14 +1746,18 @@ export default function InstalledAppsPage() {
                       gap: 12,
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                       <p
                         style={{
                           fontSize: 15,
                           fontWeight: 700,
                           color: "var(--text-primary)",
                           marginBottom: 4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
+                        title={install.appName}
                       >
                         {install.appName}
                       </p>
@@ -1600,7 +1766,11 @@ export default function InstalledAppsPage() {
                           fontSize: 11,
                           color: "var(--text-muted)",
                           fontFamily: "JetBrains Mono, monospace",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
+                        title={install.appId}
                       >
                         {install.appId}
                       </p>
@@ -1614,6 +1784,7 @@ export default function InstalledAppsPage() {
                         borderRadius: 999,
                         fontSize: 11,
                         fontWeight: 700,
+                        flexShrink: 0,
                       }}
                     >
                       {meta.label}
@@ -1699,9 +1870,8 @@ export default function InstalledAppsPage() {
                   <div
                     style={{
                       display: "flex",
-                      justifyContent: "space-between",
+                      flexDirection: "column",
                       gap: 10,
-                      flexWrap: "wrap",
                     }}
                   >
                     <div
@@ -1716,47 +1886,50 @@ export default function InstalledAppsPage() {
                       <ServerIcon size={12} />
                       {install.server?.name ?? "Unknown server"}
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12, padding: "6px 10px" }}
-                        onClick={() =>
-                          window.open(
-                            `http://${install.server?.ip}:${install.port?.split(":")[0]}`,
-                            "_blank",
-                          )
-                        }
-                      >
-                        <Boxes size={12} /> Open WebUI
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12, padding: "6px 10px" }}
-                        onClick={() => openInstallModal(install, "logs")}
-                      >
-                        <ScrollText size={12} /> Logs
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12, padding: "6px 10px" }}
+                        type="button"
+                        className="btn btn-success"
+                        style={{
+                          flex: "1 1 120px",
+                          fontSize: 11,
+                          padding: "5px",
+                        }}
                         onClick={() => openInstallModal(install, "overview")}
                       >
-                        <Cpu size={12} /> Ops
+                        <Wrench size={11} />
+                        Detail/Ops
                       </button>
                       <button
-                        className="btn btn-danger"
-                        style={{ fontSize: 12, padding: "6px 10px" }}
+                        type="button"
+                        className="btn btn-primary"
+                        style={{
+                          flex: "1 1 120px",
+                          fontSize: 11,
+                          padding: "5px",
+                        }}
+                        onClick={() => openInstallEnvironment(install)}
+                      >
+                        <Container size={11} />
+                        Open Env
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{
+                          flex: "1 1 120px",
+                          fontSize: 11,
+                          padding: "5px",
+                        }}
                         onClick={() => void handleRemove(install)}
                         disabled={removingId === install.id}
                       >
                         {removingId === install.id ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : install.status === "FAILED" ? (
-                          <XCircle size={12} />
+                          <Loader2 size={11} className="animate-spin" />
                         ) : (
-                          <Trash2 size={12} />
+                          <Trash2 size={11} />
                         )}
-                        Remove
+                        {removingId === install.id ? "Removing..." : "Remove"}
                       </button>
                     </div>
                   </div>

@@ -520,6 +520,7 @@ const installSchema = z
     templateSnapshot: templateSnapshotSchema.optional(),
     serverId: z.string(),
     environmentId: z.string().trim().max(64).optional().or(z.literal("")),
+    networkId: z.string().trim().max(64).optional().or(z.literal("")),
     appName: z.string().min(1).max(120).optional(),
     image: z.string().min(1).max(255).optional(),
     tag: z.string().max(120).optional(),
@@ -660,7 +661,74 @@ export async function appsRoutes(app: FastifyInstance) {
       ? await overlayInstallRuntimeStatuses(dedupedInstalls)
       : dedupedInstalls;
 
-    return reply.send({ success: true, data: installsWithRuntime });
+    const installContainerFilters = dedupedInstalls
+      .map((install) => ({
+        serverId: install.serverId,
+        containerName: install.containerName?.trim(),
+      }))
+      .filter(
+        (item): item is { serverId: string; containerName: string } =>
+          Boolean(item.containerName),
+      );
+    const containers =
+      installContainerFilters.length > 0
+        ? await prisma.container.findMany({
+            where: {
+              server: { organizationId: req.organizationId! },
+              OR: installContainerFilters.map((item) => ({
+                serverId: item.serverId,
+                name: { equals: item.containerName, mode: "insensitive" },
+              })),
+            },
+            select: {
+              id: true,
+              serverId: true,
+              name: true,
+              environment: {
+                select: {
+                  id: true,
+                  projectId: true,
+                  name: true,
+                  project: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : [];
+    const environmentByContainer = new Map(
+      containers
+        .filter((container) => container.environment)
+        .map((container) => [
+          `${container.serverId}::${container.name.trim().toLowerCase()}`,
+          container.environment
+            ? {
+                containerId: container.id,
+                ...container.environment,
+              }
+            : null,
+        ]),
+    );
+    const installsWithEnvironment = installsWithRuntime.map((install) => {
+      const containerName = install.containerName?.trim();
+      const environment = containerName
+        ? environmentByContainer.get(
+            `${install.serverId}::${containerName.toLowerCase()}`,
+          )
+        : null;
+
+      return {
+        ...install,
+        environment: environment ?? null,
+      };
+    });
+
+    return reply.send({ success: true, data: installsWithEnvironment });
   });
 
   app.post("/install", { preHandler: appWriteAccess }, async (req, reply) => {
@@ -699,6 +767,25 @@ export async function appsRoutes(app: FastifyInstance) {
           error: "Selected environment was not found for this server",
         });
       }
+    }
+
+    const selectedNetworkId = body.data.networkId?.trim() || null;
+    const selectedNetwork = selectedNetworkId
+      ? await prisma.network.findFirst({
+          where: {
+            id: selectedNetworkId,
+            serverId: server.id,
+            server: { organizationId: req.organizationId! },
+          },
+          select: { id: true, name: true },
+        })
+      : null;
+
+    if (selectedNetworkId && !selectedNetwork) {
+      return reply.status(400).send({
+        success: false,
+        error: "Selected Docker network was not found for this server",
+      });
     }
 
     const dockerStatus = await ssh.getDockerRuntimeStatus(server);
@@ -761,6 +848,7 @@ export async function appsRoutes(app: FastifyInstance) {
       "",
     );
     const finalNetwork = firstDefined(
+      selectedNetwork?.name,
       body.data.network,
       preset?.defaultNetwork,
       template?.defaultNetwork,
