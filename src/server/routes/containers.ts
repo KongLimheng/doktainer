@@ -963,6 +963,31 @@ function isProcessJobCancelling(job: { status: string }) {
   return job.status === "cancelling";
 }
 
+function parseInjectedResponsePayload(response: {
+  body: string;
+  statusCode: number;
+}) {
+  const body = response.body.trim();
+
+  if (!body) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(body) as {
+      error?: unknown;
+      [key: string]: unknown;
+    };
+  } catch {
+    return {
+      error:
+        response.statusCode >= 400
+          ? body
+          : `Backend returned a non-JSON response: ${body}`,
+    };
+  }
+}
+
 function runInjectedContainerJob(input: {
   app: FastifyInstance;
   job: ReturnType<typeof createProcessJob>;
@@ -1020,10 +1045,7 @@ function runInjectedContainerJob(input: {
         return;
       }
 
-      const payload = response.json() as {
-        error?: unknown;
-        [key: string]: unknown;
-      };
+      const payload = parseInjectedResponsePayload(response);
       if (response.statusCode >= 400) {
         const error =
           typeof payload?.error === "string"
