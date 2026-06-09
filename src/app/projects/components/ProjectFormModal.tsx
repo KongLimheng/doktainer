@@ -2,21 +2,24 @@
 
 import { useMemo, useState } from "react";
 import { FolderArchive, Loader2, LucideRocket, X } from "lucide-react";
-import type { ProjectCreateBody } from "@/lib/api";
+import type { ProjectCreateBody, ProjectRecord } from "@/lib/api";
 
 interface ProjectFormModalProps {
+  project?: ProjectRecord;
   submitting: boolean;
   onClose: () => void;
   onSubmit: (payload: ProjectCreateBody) => Promise<void>;
 }
 
 export default function ProjectFormModal({
+  project,
   submitting,
   onClose,
   onSubmit,
 }: ProjectFormModalProps) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const isEditing = Boolean(project);
+  const [name, setName] = useState(project?.name ?? "");
+  const [description, setDescription] = useState(project?.description ?? "");
   const [error, setError] = useState("");
 
   const canSubmit = useMemo(() => name.trim().length >= 2, [name]);
@@ -30,11 +33,13 @@ export default function ProjectFormModal({
     }
 
     setError("");
-    await onSubmit({
+    const payload = {
       name: name.trim(),
       description: description.trim(),
-      environments: [],
-    });
+      ...(isEditing ? {} : { environments: [] }),
+    };
+
+    await onSubmit(payload);
   };
 
   return (
@@ -69,12 +74,14 @@ export default function ProjectFormModal({
               }}
             >
               <FolderArchive size={18} style={{ marginRight: 8 }} />
-              Create New Project
+              {isEditing ? "Project Detail/Ops" : "Create New Project"}
             </h3>
             <p
               style={{ marginTop: 2, color: "var(--text-muted)", fontSize: 12 }}
             >
-              Create a new project to manage your environments and deployments.
+              {isEditing
+                ? "Update project information used across environments and deployments."
+                : "Create a new project to manage your environments and deployments."}
             </p>
           </div>
           <button
@@ -178,7 +185,13 @@ export default function ProjectFormModal({
             ) : (
               <LucideRocket size={18} style={{ marginRight: 0 }} />
             )}
-            {submitting ? "Creating..." : "Create Project"}
+            {submitting
+              ? isEditing
+                ? "Saving..."
+                : "Creating..."
+              : isEditing
+                ? "Save Changes"
+                : "Create Project"}
           </button>
         </div>
       </form>

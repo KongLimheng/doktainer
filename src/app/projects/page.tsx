@@ -31,7 +31,11 @@ export default function ProjectsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [showProjectModal, setShowProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectRecord | null>(
+    null,
+  );
   const [creatingProject, setCreatingProject] = useState(false);
+  const [updatingProject, setUpdatingProject] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null,
   );
@@ -154,6 +158,46 @@ export default function ProjectsPage() {
     [pushToast],
   );
 
+  const handleUpdateProject = useCallback(
+    async (payload: ProjectCreateBody) => {
+      if (!editingProject) {
+        return;
+      }
+
+      setUpdatingProject(true);
+      try {
+        const response = await projectsApi.update(editingProject.id, {
+          name: payload.name,
+          description: payload.description,
+        });
+        const updatedProject = response.data;
+        if (updatedProject) {
+          setProjects((current) =>
+            current.map((project) =>
+              project.id === updatedProject.id ? updatedProject : project,
+            ),
+          );
+        }
+        setEditingProject(null);
+        pushToast({
+          tone: "success",
+          title: "Project updated",
+          message: `Project ${payload.name} has been successfully updated.`,
+        });
+      } catch (error) {
+        pushToast({
+          tone: "error",
+          title: "Update failed",
+          message:
+            error instanceof Error ? error.message : "Project update failed.",
+        });
+      } finally {
+        setUpdatingProject(false);
+      }
+    },
+    [editingProject, pushToast],
+  );
+
   const performDeleteProject = useCallback(
     async (project: ProjectRecord) => {
       setDeletingProjectId(project.id);
@@ -236,7 +280,10 @@ export default function ProjectsPage() {
           addLabel="Create Project"
           onSearchChange={setSearch}
           onRefresh={() => load(true)}
-          onAdd={() => setShowProjectModal(true)}
+          onAdd={() => {
+            setEditingProject(null);
+            setShowProjectModal(true);
+          }}
         />
 
         <ProjectsStatePanel
@@ -244,23 +291,31 @@ export default function ProjectsPage() {
           isEmpty={filteredProjects.length === 0}
           searchActive={Boolean(search.trim())}
           canCreate={true}
-          onAdd={() => setShowProjectModal(true)}
+          onAdd={() => {
+            setEditingProject(null);
+            setShowProjectModal(true);
+          }}
         />
 
         {!loading && filteredProjects.length > 0 ? (
           <ProjectsGrid
             projects={filteredProjects}
             deletingProjectId={deletingProjectId}
+            onEditProject={setEditingProject}
             onDeleteProject={handleDeleteProject}
           />
         ) : null}
       </div>
 
-      {showProjectModal ? (
+      {showProjectModal || editingProject ? (
         <ProjectFormModal
-          submitting={creatingProject}
-          onClose={() => setShowProjectModal(false)}
-          onSubmit={handleCreateProject}
+          project={editingProject ?? undefined}
+          submitting={editingProject ? updatingProject : creatingProject}
+          onClose={() => {
+            setShowProjectModal(false);
+            setEditingProject(null);
+          }}
+          onSubmit={editingProject ? handleUpdateProject : handleCreateProject}
         />
       ) : null}
     </DashboardLayout>

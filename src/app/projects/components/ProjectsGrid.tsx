@@ -1,16 +1,18 @@
 import Link from "next/link";
-import { FolderTree, Layers3, Trash2 } from "lucide-react";
+import { FolderTree, Layers3, Trash2, Wrench } from "lucide-react";
 import type { ProjectRecord } from "@/lib/api";
 
 interface ProjectsGridProps {
   projects: ProjectRecord[];
   deletingProjectId: string | null;
+  onEditProject: (project: ProjectRecord) => void;
   onDeleteProject: (project: ProjectRecord) => void;
 }
 
 export default function ProjectsGrid({
   projects,
   deletingProjectId,
+  onEditProject,
   onDeleteProject,
 }: ProjectsGridProps) {
   if (projects.length === 0) {
@@ -202,12 +204,25 @@ export default function ProjectsGrid({
             ))}
           </div>
 
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={() => onEditProject(project)}
+              style={{
+                flex: "1 1 120px",
+                fontSize: 11,
+                padding: "5px",
+              }}
+            >
+              <Wrench size={11} />
+              Detail/Ops
+            </button>
             <Link
               href={`/projects/${project.id}`}
-              className="btn btn-success"
+              className="btn btn-primary"
               style={{
-                flex: 1,
+                flex: "1 1 120px",
                 fontSize: 11,
                 padding: "5px",
                 textDecoration: "none",
@@ -221,7 +236,7 @@ export default function ProjectsGrid({
               className="btn btn-ghost"
               onClick={() => onDeleteProject(project)}
               disabled={deletingProjectId === project.id}
-              style={{ flex: 1, fontSize: 11, padding: "5px" }}
+              style={{ flex: "1 1 120px", fontSize: 11, padding: "5px" }}
             >
               <Trash2 size={11} />
               {deletingProjectId === project.id ? "Deleting..." : "Remove"}

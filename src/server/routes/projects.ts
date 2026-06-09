@@ -28,6 +28,11 @@ const ProjectCreateSchema = z.object({
   environments: z.array(ProjectEnvironmentInputSchema).max(12).default([]),
 });
 
+const ProjectUpdateSchema = ProjectCreateSchema.pick({
+  name: true,
+  description: true,
+});
+
 const EnvironmentCreateSchema = ProjectEnvironmentInputSchema;
 
 const EnvironmentUpdateSchema = ProjectEnvironmentInputSchema;
@@ -54,6 +59,7 @@ async function generateUniqueProjectSlug(
   db: DbClient,
   organizationId: string,
   name: string,
+  excludeProjectId?: string,
 ) {
   const base = slugify(name);
   let slug = base;
@@ -61,7 +67,11 @@ async function generateUniqueProjectSlug(
 
   while (
     await db.project.findFirst({
-      where: { organizationId, slug },
+      where: {
+        organizationId,
+        slug,
+        ...(excludeProjectId ? { id: { not: excludeProjectId } } : {}),
+      },
       select: { id: true },
     })
   ) {
@@ -397,6 +407,85 @@ export async function projectsRoutes(app: FastifyInstance) {
           success: false,
           error:
             error instanceof Error ? error.message : "Failed to create project",
+        });
+      }
+    },
+  );
+
+  app.patch(
+    "/:id",
+    { preHandler: [requireRole("DEVELOPER")] },
+    async (req, reply) => {
+      const organizationId = req.organizationId;
+      if (!organizationId) {
+        return reply
+          .status(400)
+          .send({ success: false, error: "Active organization is required" });
+      }
+
+      const { id } = req.params as { id: string };
+      const body = ProjectUpdateSchema.safeParse(req.body);
+      if (!body.success) {
+        return reply
+          .status(400)
+          .send({ success: false, error: body.error.flatten() });
+      }
+
+      const project = await prisma.project.findFirst({
+        where: { id, organizationId },
+        select: { id: true, name: true, slug: true },
+      });
+
+      if (!project) {
+        return reply
+          .status(404)
+          .send({ success: false, error: "Project not found" });
+      }
+
+      try {
+        await prisma.project.update({
+          where: { id: project.id },
+          data: {
+            name: body.data.name,
+            slug:
+              body.data.name === project.name
+                ? project.slug
+                : await generateUniqueProjectSlug(
+                    prisma,
+                    organizationId,
+                    body.data.name,
+                    project.id,
+                  ),
+            description: body.data.description || null,
+          },
+        });
+
+        const freshProject = await getProjectByIdForOrganization(
+          project.id,
+          organizationId,
+        );
+        if (!freshProject) {
+          throw new Error("Project updated but could not be loaded");
+        }
+
+        await auditLog({
+          userId: req.userId,
+          organizationId,
+          action: "PROJECT_UPDATE",
+          category: "SYSTEM",
+          level: "INFO",
+          message: `Project \"${freshProject.name}\" updated`,
+        });
+
+        return reply.send({
+          success: true,
+          data: serializeProject(freshProject),
+        });
+      } catch (error) {
+        return reply.status(400).send({
+          success: false,
+          error:
+            error instanceof Error ? error.message : "Failed to update project",
         });
       }
     },

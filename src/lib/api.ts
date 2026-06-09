@@ -251,6 +251,8 @@ export interface ProjectCreateBody {
   environments?: ProjectEnvironmentCreateBody[];
 }
 
+export type ProjectUpdateBody = Pick<ProjectCreateBody, "name" | "description">;
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -381,6 +383,40 @@ export interface UpdateSettingsBody {
       token?: string;
     };
   };
+}
+
+export type PanelAccessProxy = "NGINX" | "CADDY" | "TRAEFIK";
+
+export interface PanelProxyCapability {
+  type: PanelAccessProxy;
+  label: string;
+  installed: boolean;
+  active: boolean;
+  available: boolean;
+  supportsProvisioning: boolean;
+  reason: string | null;
+}
+
+export interface PanelAccessCapabilities {
+  proxies: PanelProxyCapability[];
+  autoSsl: {
+    installed: boolean;
+    available: boolean;
+    reason: string | null;
+  };
+  defaultProxy: PanelAccessProxy | null;
+  upstream: string;
+}
+
+export interface PanelAccessProvisionResult {
+  domain: string;
+  panelUrl: string;
+  proxy: PanelAccessProxy;
+  configPath: string;
+  enabledPath: string;
+  reloadTarget: string;
+  sslEnabled: boolean;
+  message: string;
 }
 
 export type S3StorageProvider =
@@ -958,6 +994,9 @@ export const projectsApi = {
 
   create: (body: ProjectCreateBody) =>
     post<{ success: boolean; data: ProjectRecord }>("/projects", body),
+
+  update: (id: string, body: ProjectUpdateBody) =>
+    patch<{ success: boolean; data: ProjectRecord }>(`/projects/${id}`, body),
 
   addEnvironment: (projectId: string, body: ProjectEnvironmentCreateBody) =>
     post<{ success: boolean; data: ProjectEnvironmentRecord }>(
