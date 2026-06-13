@@ -1118,11 +1118,7 @@ export default function AppContainerDetailPage() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [
-    appDetailId,
-    containerRecord?.status,
-    refreshRuntimeMetrics,
-  ]);
+  }, [appDetailId, containerRecord?.status, refreshRuntimeMetrics]);
 
   useEffect(() => {
     if (!logsAutoRefresh) return;
@@ -1269,9 +1265,8 @@ export default function AppContainerDetailPage() {
                 refreshing={logsRefreshing}
                 onAutoRefreshChange={setLogsAutoRefresh}
               />
-            ) : activeTab === "terminal" ? (
-              null
-            ) : activeTab === "deployments" ? (
+            ) : activeTab === "terminal" ? null : activeTab ===
+              "deployments" ? (
               <DeploymentsTabPanel deployments={appDetail.deployments} />
             ) : activeTab === "advanced" ? (
               <AdvancedTabPanel
