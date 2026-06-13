@@ -22,6 +22,7 @@ import DeployContainerModal from "@/app/containers/components/modals/DeployConta
 import AddDatabaseModal from "@/app/databases/components/AddDatabaseModal";
 import EnvironmentContainersTable from "./components/containers/EnvironmentContainersTable";
 import EnvironmentHeader from "./components/header/EnvironmentHeader";
+import ImportFromSyncModal from "./components/import/ImportFromSyncModal";
 import EnvironmentContainersSummary from "./components/summary/EnvironmentContainersSummary";
 import EnvironmentContainersToolbar from "./components/toolbar/EnvironmentContainersToolbar";
 import type {
@@ -97,6 +98,7 @@ export default function EnvironmentContainersPage() {
   const [syncing, setSyncing] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
   const [showDeployDatabase, setShowDeployDatabase] = useState(false);
+  const [showImportFromSync, setShowImportFromSync] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -184,6 +186,25 @@ export default function EnvironmentContainersPage() {
     }
   }, [activeEnvironment, load, pushToast]);
 
+  const handleImportAssign = useCallback(
+    async (containerIds: string[]) => {
+      if (!activeEnvironment) {
+        return;
+      }
+
+      await projectsApi.updateEnvironmentContainers(activeEnvironment.id, {
+        containerIds,
+      });
+      await load();
+      pushToast({
+        tone: "success",
+        title: "Container assigned",
+        message: "Synced container has been assigned to this environment.",
+      });
+    },
+    [activeEnvironment, load, pushToast],
+  );
+
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       void load();
@@ -249,6 +270,16 @@ export default function EnvironmentContainersPage() {
           }}
         />
       ) : null}
+      {showImportFromSync && activeEnvironment ? (
+        <ImportFromSyncModal
+          environmentId={activeEnvironment.id}
+          serverId={activeEnvironment.serverId}
+          serverName={activeEnvironment.server.name}
+          environmentName={activeEnvironment.name}
+          onClose={() => setShowImportFromSync(false)}
+          onAssign={handleImportAssign}
+        />
+      ) : null}
       <ProcessLogsModal
         open={isProcessLogsOpen}
         onClose={closeProcessLogs}
@@ -292,6 +323,7 @@ export default function EnvironmentContainersPage() {
           onSync={handleSync}
           onDeployContainer={() => setShowDeploy(true)}
           onDeployDatabase={() => setShowDeployDatabase(true)}
+          onImportFromSync={() => setShowImportFromSync(true)}
         />
         <EnvironmentContainersTable
           projectId={params.projectId}

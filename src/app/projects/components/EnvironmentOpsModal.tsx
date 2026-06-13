@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Loader2, Save, X } from "lucide-react";
 import {
-  CheckSquare,
-  Info,
-  Loader2,
-  Save,
-  Server as ServerIcon,
-  Square,
-  X,
-} from "lucide-react";
-import {
-  type Container,
-  containers,
   type ProjectEnvironmentKind,
   type ProjectEnvironmentRecord,
   type ProjectEnvironmentUpdateBody,
@@ -27,7 +17,6 @@ interface EnvironmentOpsModalProps {
   onSubmit: (
     environmentId: string,
     payload: ProjectEnvironmentUpdateBody,
-    containerIds: string[],
   ) => Promise<void>;
 }
 
@@ -38,10 +27,6 @@ const kinds: Array<{ value: ProjectEnvironmentKind; label: string }> = [
   { value: "PREVIEW", label: "Preview" },
   { value: "CUSTOM", label: "Custom" },
 ];
-
-function formatStatus(value: string) {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
 
 export default function EnvironmentOpsModal({
   environment,
@@ -54,85 +39,27 @@ export default function EnvironmentOpsModal({
   const [kind, setKind] = useState<ProjectEnvironmentKind>(environment.kind);
   const [serverId, setServerId] = useState(environment.serverId);
   const [description, setDescription] = useState(environment.description ?? "");
-  const [serverContainers, setServerContainers] = useState<Container[]>([]);
-  const [selectedContainerIds, setSelectedContainerIds] = useState<string[]>(
-    [],
-  );
-  const [loadingContainers, setLoadingContainers] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadContainers = async () => {
-      setLoadingContainers(true);
-      setError("");
-
-      try {
-        const response = await containers.list({ serverId });
-        if (!mounted) {
-          return;
-        }
-
-        const nextContainers = response.data ?? [];
-        setServerContainers(nextContainers);
-        setSelectedContainerIds(
-          nextContainers
-            .filter((container) => container.environmentId === environment.id)
-            .map((container) => container.id),
-        );
-      } catch (loadError) {
-        if (!mounted) {
-          return;
-        }
-
-        setServerContainers([]);
-        setSelectedContainerIds([]);
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Container tidak bisa dimuat.",
-        );
-      } finally {
-        if (mounted) {
-          setLoadingContainers(false);
-        }
-      }
-    };
-
-    void loadContainers();
-
-    return () => {
-      mounted = false;
-    };
-  }, [environment.id, serverId]);
-
   const hasServerChanged = serverId !== environment.serverId;
+  const hasAssignedContainers = environment.containersCount > 0;
   const canSubmit = useMemo(
     () =>
       name.trim().length >= 2 &&
       serverId.trim().length > 0 &&
-      (!hasServerChanged || selectedContainerIds.length === 0),
-    [hasServerChanged, name, selectedContainerIds.length, serverId],
+      (!hasServerChanged || !hasAssignedContainers),
+    [hasAssignedContainers, hasServerChanged, name, serverId],
   );
 
   const selectedServer = serverList.find((server) => server.id === serverId);
-
-  const toggleContainer = (containerId: string) => {
-    setSelectedContainerIds((current) =>
-      current.includes(containerId)
-        ? current.filter((id) => id !== containerId)
-        : [...current, containerId],
-    );
-  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!canSubmit) {
       setError(
-        hasServerChanged
-          ? "Lepas semua container sebelum memindahkan environment ke server lain."
+        hasServerChanged && hasAssignedContainers
+          ? "Move or unassign containers before moving this environment to another server."
           : "Lengkapi nama environment dan server tujuan.",
       );
       return;
@@ -147,7 +74,6 @@ export default function EnvironmentOpsModal({
         serverId,
         description: description.trim(),
       },
-      selectedContainerIds,
     );
   };
 
@@ -181,7 +107,7 @@ export default function EnvironmentOpsModal({
             <p
               style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 2 }}
             >
-              Informasi, edit metadata, dan pointing services/container.
+              Informasi dan edit metadata environment.
             </p>
           </div>
           <button
@@ -217,7 +143,7 @@ export default function EnvironmentOpsModal({
               label: "Server IP",
               value: selectedServer?.ip ?? environment.server.ip,
             },
-            { label: "Containers", value: selectedContainerIds.length },
+            { label: "Containers", value: environment.containersCount },
           ].map((item) => (
             <div
               key={item.label}
@@ -351,149 +277,11 @@ export default function EnvironmentOpsModal({
           </div>
         </div>
 
-        <section style={{ marginTop: 18 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <ServerIcon size={14} style={{ color: "var(--text-muted)" }} />
-              <strong style={{ fontSize: 13 }}>Services / Containers</strong>
-            </div>
-            {loadingContainers ? (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                }}
-              >
-                <Loader2 size={12} className="animate-spin" />
-                Loading
-              </span>
-            ) : null}
-          </div>
-
-          <div
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 7,
-              overflow: "hidden",
-            }}
-          >
-            {serverContainers.length > 0 ? (
-              serverContainers.map((container) => {
-                const checked = selectedContainerIds.includes(container.id);
-                const ownedByOtherEnvironment =
-                  container.environmentId &&
-                  container.environmentId !== environment.id;
-
-                return (
-                  <button
-                    type="button"
-                    key={container.id}
-                    onClick={() => toggleContainer(container.id)}
-                    style={{
-                      width: "100%",
-                      display: "grid",
-                      gridTemplateColumns: "20px minmax(0, 1fr) auto",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "10px 12px",
-                      background: checked
-                        ? "rgba(16,185,129,0.08)"
-                        : "var(--bg-input)",
-                      border: 0,
-                      borderBottom: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    {checked ? (
-                      <CheckSquare size={14} style={{ color: "#10b981" }} />
-                    ) : (
-                      <Square
-                        size={14}
-                        style={{ color: "var(--text-muted)" }}
-                      />
-                    )}
-                    <span style={{ minWidth: 0 }}>
-                      <strong
-                        style={{
-                          display: "block",
-                          fontSize: 12,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {container.name}
-                      </strong>
-                      <span
-                        style={{
-                          display: "block",
-                          color: "var(--text-muted)",
-                          fontSize: 11,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {container.image}
-                      </span>
-                    </span>
-                    <span
-                      style={{
-                        color: ownedByOtherEnvironment ? "#f59e0b" : "#94a3b8",
-                        border: `1px solid ${
-                          ownedByOtherEnvironment
-                            ? "rgba(245,158,11,0.3)"
-                            : "rgba(100,116,139,0.3)"
-                        }`,
-                        borderRadius: 6,
-                        padding: "3px 8px",
-                        fontSize: 11,
-                      }}
-                    >
-                      {ownedByOtherEnvironment
-                        ? "Reassign"
-                        : formatStatus(container.status)}
-                    </span>
-                  </button>
-                );
-              })
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: 12,
-                  background: "var(--bg-input)",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                }}
-              >
-                <Info size={14} />
-                No containers are assigned to this server.
-              </div>
-            )}
-          </div>
-        </section>
-
-        {hasServerChanged ? (
+        {hasServerChanged && hasAssignedContainers ? (
           <p style={{ color: "#f59e0b", fontSize: 12, marginTop: 10 }}>
             Environment can only be moved to another server if it does not have
-            any container assigned. Please reassign or remove all containers
-            before changing the server.
+            any container assigned. Use Import from Sync on the environment
+            page to manage container assignments.
           </p>
         ) : null}
 
@@ -532,7 +320,7 @@ export default function EnvironmentOpsModal({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!canSubmit || submitting || loadingContainers}
+            disabled={!canSubmit || submitting}
           >
             {submitting ? (
               <Loader2 size={14} className="animate-spin" />

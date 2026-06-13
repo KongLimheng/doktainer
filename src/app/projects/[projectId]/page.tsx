@@ -281,7 +281,6 @@ export default function ProjectDetailPage() {
     async (
       environmentId: string,
       payload: ProjectEnvironmentUpdateBody,
-      containerIds: string[],
     ) => {
       setUpdatingEnvironment(true);
       try {
@@ -289,12 +288,7 @@ export default function ProjectDetailPage() {
           environmentId,
           payload,
         );
-        const assignmentResponse =
-          await projectsApi.updateEnvironmentContainers(environmentId, {
-            containerIds,
-          });
-        const updatedEnvironment =
-          assignmentResponse.data ?? updateResponse.data;
+        const updatedEnvironment = updateResponse.data;
 
         if (updatedEnvironment) {
           setProject((current) => {

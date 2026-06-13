@@ -19,6 +19,7 @@ interface EnvironmentContainersToolbarProps {
   onSync: () => void | Promise<void>;
   onDeployContainer: () => void;
   onDeployDatabase: () => void;
+  onImportFromSync: () => void;
 }
 
 export default function EnvironmentContainersToolbar({
@@ -30,6 +31,7 @@ export default function EnvironmentContainersToolbar({
   onSync,
   onDeployContainer,
   onDeployDatabase,
+  onImportFromSync,
 }: EnvironmentContainersToolbarProps) {
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const deployMenuRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +60,11 @@ export default function EnvironmentContainersToolbar({
   const handleDeployDatabase = () => {
     setDeployMenuOpen(false);
     onDeployDatabase();
+  };
+
+  const handleImportFromSync = () => {
+    setDeployMenuOpen(false);
+    onImportFromSync();
   };
 
   return (
@@ -154,7 +161,7 @@ export default function EnvironmentContainersToolbar({
                 type="button"
                 role="menuitem"
                 className="btn btn-ghost"
-                onClick={handleDeployDatabase}
+                onClick={handleImportFromSync}
                 style={{
                   justifyContent: "flex-start",
                   fontSize: 12,
@@ -179,7 +186,7 @@ export default function EnvironmentContainersToolbar({
                   size={14}
                   style={{ color: "var(--accent-red)" }}
                 />
-                Import form Sync
+                Import from Sync
               </button>
             </div>
           ) : null}
