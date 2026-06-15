@@ -41,6 +41,8 @@ interface ContainerFileManagerModalProps {
   onClose: () => void;
 }
 
+const FILE_MANAGER_UPLOAD_MAX_BYTES = 6 * 1024 * 1024;
+
 type PendingConfirmAction = {
   title: string;
   description: string;
@@ -288,6 +290,16 @@ export default function ContainerFileManagerModal({
 
   const uploadFileObject = useCallback(
     async (file: File) => {
+      if (file.size > FILE_MANAGER_UPLOAD_MAX_BYTES) {
+        setNotice({
+          tone: "error",
+          message: `File is too large. Maximum upload size is ${formatBytes(
+            FILE_MANAGER_UPLOAD_MAX_BYTES,
+          )}.`,
+        });
+        return;
+      }
+
       setUploading(true);
       setNotice(null);
       try {

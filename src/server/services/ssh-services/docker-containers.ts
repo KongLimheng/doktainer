@@ -22,6 +22,7 @@ const DOCKER_FILE_LIST_TIMEOUT_MS = 10_000;
 const DOCKER_FILE_READ_TIMEOUT_MS = 15_000;
 const DOCKER_FILE_WRITE_TIMEOUT_MS = 20_000;
 const DOCKER_FILE_DOWNLOAD_TIMEOUT_MS = 30_000;
+const CONTAINER_FILE_UPLOAD_CHUNK_SIZE = 48_000;
 const DEPLOY_GIT_CLONE_TIMEOUT_MS = 10 * 60_000;
 const DEPLOY_BUILD_TIMEOUT_MS = 45 * 60_000;
 const DEPLOY_COMPOSE_TIMEOUT_MS = 45 * 60_000;
@@ -1220,12 +1221,77 @@ export async function writeContainerFileBase64(
   filePath: string,
   contentBase64: string,
 ): Promise<{ path: string; size: number }> {
-  const script = [
+  const uploadId = randomBytes(8).toString("hex");
+  const tempBase64Path = `${filePath}.doktainer-upload-${uploadId}.b64`;
+  const tempFilePath = `${filePath}.doktainer-upload-${uploadId}.tmp`;
+  const prepareScript = [
     `TARGET=${escapeShellArg(filePath)}`,
+    `TEMP_B64=${escapeShellArg(tempBase64Path)}`,
+    `TEMP_FILE=${escapeShellArg(tempFilePath)}`,
     'PARENT=$(dirname "$TARGET")',
     'if [ ! -d "$PARENT" ]; then echo "__ERROR__\tParent directory not found"; exit 22; fi',
     'if [ -e "$TARGET" ] && [ ! -f "$TARGET" ]; then echo "__ERROR__\tOnly regular files can be overwritten"; exit 31; fi',
-    `printf %s ${escapeShellArg(contentBase64)} | base64 -d > "$TARGET"`,
+    'rm -f "$TEMP_B64" "$TEMP_FILE"',
+    ': > "$TEMP_B64"',
+    'printf "__OK__\tprepared\n"',
+  ].join("\n");
+
+  await execContainerShell(
+    server,
+    containerId,
+    prepareScript,
+    DOCKER_FILE_WRITE_TIMEOUT_MS,
+  );
+
+  try {
+    for (
+      let offset = 0;
+      offset < contentBase64.length;
+      offset += CONTAINER_FILE_UPLOAD_CHUNK_SIZE
+    ) {
+      const chunk = contentBase64.slice(
+        offset,
+        offset + CONTAINER_FILE_UPLOAD_CHUNK_SIZE,
+      );
+      const appendScript = [
+        `TEMP_B64=${escapeShellArg(tempBase64Path)}`,
+        `printf %s ${escapeShellArg(chunk)} >> "$TEMP_B64"`,
+        'printf "__OK__\tappended\n"',
+      ].join("\n");
+
+      await execContainerShell(
+        server,
+        containerId,
+        appendScript,
+        DOCKER_FILE_WRITE_TIMEOUT_MS,
+      );
+    }
+  } catch (error) {
+    const cleanupScript = [
+      `TEMP_B64=${escapeShellArg(tempBase64Path)}`,
+      `TEMP_FILE=${escapeShellArg(tempFilePath)}`,
+      'rm -f "$TEMP_B64" "$TEMP_FILE"',
+    ].join("\n");
+    try {
+      await execContainerShell(
+        server,
+        containerId,
+        cleanupScript,
+        DOCKER_FILE_WRITE_TIMEOUT_MS,
+      );
+    } catch {
+      // Best-effort cleanup; surface the original upload failure.
+    }
+    throw error;
+  }
+
+  const finalizeScript = [
+    `TARGET=${escapeShellArg(filePath)}`,
+    `TEMP_B64=${escapeShellArg(tempBase64Path)}`,
+    `TEMP_FILE=${escapeShellArg(tempFilePath)}`,
+    'trap \'rm -f "$TEMP_B64" "$TEMP_FILE"\' EXIT',
+    'base64 -d "$TEMP_B64" > "$TEMP_FILE"',
+    'mv "$TEMP_FILE" "$TARGET"',
     'SIZE=$(stat -c "%s" "$TARGET" 2>/dev/null || stat -f "%z" "$TARGET" 2>/dev/null || echo "0")',
     'printf "__OK__\t%s\n" "$SIZE"',
   ].join("\n");
@@ -1233,7 +1299,7 @@ export async function writeContainerFileBase64(
   const stdout = await execContainerShell(
     server,
     containerId,
-    script,
+    finalizeScript,
     DOCKER_FILE_WRITE_TIMEOUT_MS,
   );
   const okLine = stdout

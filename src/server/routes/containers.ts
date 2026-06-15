@@ -122,6 +122,9 @@ const ContainerRenamePathSchema = z.object({
   newPath: z.string().min(1).max(2048),
 });
 
+const CONTAINER_UPLOAD_CONTENT_BASE64_MAX_LENGTH = 8_000_000;
+const CONTAINER_UPLOAD_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+
 const ContainerUploadFileSchema = z.object({
   directoryPath: z.string().min(1).max(2048),
   fileName: z
@@ -129,7 +132,10 @@ const ContainerUploadFileSchema = z.object({
     .min(1)
     .max(255)
     .refine((value) => !value.includes("/")),
-  contentBase64: z.string().min(1).max(8_000_000),
+  contentBase64: z
+    .string()
+    .min(1)
+    .max(CONTAINER_UPLOAD_CONTENT_BASE64_MAX_LENGTH),
 });
 
 function mapDockerStatus(status: string): ContainerStatus {
@@ -2006,7 +2012,10 @@ export async function containerRoutes(app: FastifyInstance) {
 
   app.post(
     "/:id/file/upload",
-    { preHandler: containerWriteAccess },
+    {
+      preHandler: containerWriteAccess,
+      bodyLimit: CONTAINER_UPLOAD_BODY_LIMIT_BYTES,
+    },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = ContainerUploadFileSchema.safeParse(req.body);
