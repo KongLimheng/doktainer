@@ -385,10 +385,12 @@ export async function serverRoutes(app: FastifyInstance) {
       await tx.userServerAccess.deleteMany({ where: { serverId: id } });
       await tx.serverMetric.deleteMany({ where: { serverId: id } });
       await tx.container.deleteMany({ where: { serverId: id } });
+      await tx.environment.deleteMany({ where: { serverId: id } });
       await tx.network.deleteMany({ where: { serverId: id } });
       await tx.firewallRulePreset.deleteMany({ where: { serverId: id } });
       await tx.appInstall.deleteMany({ where: { serverId: id } });
       await tx.backup.deleteMany({ where: { serverId: id } });
+      await tx.userStorageDestination.deleteMany({ where: { serverId: id } });
 
       const invitations = await tx.userInvitation.findMany({
         where: {

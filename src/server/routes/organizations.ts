@@ -366,6 +366,9 @@ export async function organizationsRoutes(app: FastifyInstance) {
           await tx.container.deleteMany({
             where: { serverId: { in: serverIds } },
           });
+          await tx.environment.deleteMany({
+            where: { serverId: { in: serverIds } },
+          });
           await tx.network.deleteMany({
             where: { serverId: { in: serverIds } },
           });
@@ -376,6 +379,9 @@ export async function organizationsRoutes(app: FastifyInstance) {
             where: { serverId: { in: serverIds } },
           });
           await tx.backup.deleteMany({
+            where: { serverId: { in: serverIds } },
+          });
+          await tx.userStorageDestination.deleteMany({
             where: { serverId: { in: serverIds } },
           });
           await tx.server.deleteMany({ where: { id: { in: serverIds } } });
