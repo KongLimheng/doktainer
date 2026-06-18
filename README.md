@@ -13,44 +13,17 @@
 
 Doktainer is an open-source, self-hosted platform for managing servers, applications, containers, domains, SSL, backups, and deployment operations from a single web panel.
 
-This project uses a modern modular monolith architecture:
-
-- frontend with Next.js App Router
-- backend API with Fastify
-- PostgreSQL database via Prisma ORM
-- local and server deployment using Docker Compose
-
 Doktainer is intended for teams or individuals who want to own their own deployment panel without depending on a specific cloud vendor, while still retaining full control over their servers and data.
 
 ## Key Features
 
-- Server management and user access in one panel.
+- Multi-server management, Multi-Project and Multi-Container in one panel.
 - Docker-based application and container management.
 - Support for domains, SSL, networks, security, logs, metrics, and terminal access.
 - Organizations, role-based access, API keys, and user settings configuration.
 - Git provider, storage destination, and notification/backup integrations.
 - Modern panel UI with Next.js and a backend API that runs separately at runtime.
 - Support for local development and Docker deployment to a VPS or online server.
-
-## Tech Stack
-
-- Next.js 16
-- React 19
-- Fastify 5
-- Prisma 6
-- PostgreSQL 16
-- TypeScript 5
-- Docker Compose
-
-## Project Structure
-
-- `src/app` for routes and frontend pages based on the Next.js App Router.
-- `src/components` for shared UI components.
-- `src/lib` for frontend utilities and shared runtime helpers.
-- `src/server` for the Fastify backend API, services, middleware, and server libraries.
-- `prisma` for the database schema and Prisma migrations.
-- `scripts` for internal helper scripts such as Prisma client checks.
-- `tests` for tests relevant to this codebase.
 
 ## System Requirements
 
@@ -358,6 +331,23 @@ The software is free to use, modify, and distribute for **non-commercial purpose
 #### 💼 Commercial Licensing
 
 If you wish to use Doktainer for commercial purposes, business operations, or as part of a paid service, you must obtain a separate commercial license. Please contact the author for further information.
+
+---
+
+## ❤️ Sponsors
+
+Thanks to our sponsors for supporting Doktainer.
+
+| Sponsor         | Website                 | Sponsor Type      |
+| --------------- | ----------------------- | ----------------- |
+| **IDCloudhost** | https://idcloudhost.com | Cloud Hosting     |
+| **SumoPod**     | https://sumopod.com     | Cloud Hosting     |
+| **PAAS ID**     | https://paas.id         | Cloud Hosting     |
+| **Ktikme**      | https://ktik.me         | Profile BIO-Link  |
+| **Dahono Labs** | https://labs.dahono.com | AI Agent Services |
+
+Interested in sponsoring Doktainer?
+Contact us at [**Discord Server Community**](https://discord.gg/3HF85Cd6fp)
 
 ---
 

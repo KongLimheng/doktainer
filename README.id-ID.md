@@ -13,44 +13,17 @@
 
 Doktainer adalah platform open-source dan self-hosted untuk mengelola server, aplikasi, container, domain, SSL, backup, dan operasi deployment dari satu panel web.
 
-Proyek ini menggunakan arsitektur monolith modular modern:
-
-- frontend dengan Next.js App Router
-- API backend dengan Fastify
-- database PostgreSQL melalui Prisma ORM
-- deployment lokal dan server menggunakan Docker Compose
-
 Doktainer ditujukan untuk tim atau individu yang ingin memiliki panel deployment sendiri tanpa bergantung pada vendor cloud tertentu, sekaligus tetap memegang kendali penuh atas server dan data mereka.
 
 ## Fitur Utama
 
-- Manajemen server dan akses pengguna dalam satu panel.
+- Manajemen Multi-server, Multi-Proyek and Multi-Container dalam satu panel.
 - Manajemen aplikasi dan container berbasis Docker.
 - Dukungan untuk domain, SSL, jaringan, keamanan, log, metrik, dan akses terminal.
 - Organisasi, akses berbasis peran, API key, dan konfigurasi pengaturan pengguna.
 - Integrasi Git provider, tujuan penyimpanan, notifikasi, dan backup.
 - UI panel modern dengan Next.js dan API backend yang berjalan terpisah saat runtime.
 - Dukungan untuk pengembangan lokal dan deployment Docker ke VPS atau server online.
-
-## Tech Stack
-
-- Next.js 16
-- React 19
-- Fastify 5
-- Prisma 6
-- PostgreSQL 16
-- TypeScript 5
-- Docker Compose
-
-## Struktur Proyek
-
-- `src/app` untuk route dan halaman frontend berbasis Next.js App Router.
-- `src/components` untuk komponen UI bersama.
-- `src/lib` untuk utilitas frontend dan helper runtime bersama.
-- `src/server` untuk API backend Fastify, service, middleware, dan library server.
-- `prisma` untuk skema database dan migrasi Prisma.
-- `scripts` untuk script helper internal seperti pengecekan Prisma client.
-- `tests` untuk test yang relevan dengan codebase ini.
 
 ## Kebutuhan Sistem
 
@@ -358,6 +331,23 @@ Software ini bebas digunakan, dimodifikasi, dan didistribusikan hanya untuk **tu
 #### Lisensi Komersial
 
 Jika ingin menggunakan Doktainer untuk tujuan komersial, operasional bisnis, atau sebagai bagian dari layanan berbayar, Anda harus memperoleh lisensi komersial terpisah. Silakan hubungi author untuk informasi lebih lanjut.
+
+---
+
+## ❤️ Sponsors
+
+Terima kasih kepada sponsor yang sudah mendukung Doktainer.
+
+| Sponsor         | Website                 | Jenis Sponsor     |
+| --------------- | ----------------------- | ----------------- |
+| **IDCloudhost** | https://idcloudhost.com | Cloud Hosting     |
+| **SumoPod**     | https://sumopod.com     | Cloud Hosting     |
+| **PAAS ID**     | https://paas.id         | Cloud Hosting     |
+| **Ktikme**      | https://ktik.me         | Profile BIO-Link  |
+| **Dahono Labs** | https://labs.dahono.com | AI Agent Services |
+
+Tertarik juga untuk menjadi sponsor Doktainer?
+Hubungi kami melalui [**Discord Server Community**](https://discord.gg/3HF85Cd6fp)
 
 ---
 
