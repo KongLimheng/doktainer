@@ -508,6 +508,7 @@ export default function ContainersPage() {
           onDeployed={load}
           onProcessOpen={openProcessLogs}
           onProcessUpdate={updateProcessLogs}
+          onToast={pushToast}
         />
       ) : null}
       {logsFor ? (

@@ -255,6 +255,7 @@ export default function EnvironmentContainersPage() {
           onDeployed={load}
           onProcessOpen={openProcessLogs}
           onProcessUpdate={updateProcessLogs}
+          onToast={pushToast}
         />
       ) : null}
       {showDeployDatabase && activeEnvironment ? (

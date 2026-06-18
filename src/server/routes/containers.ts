@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply } from "fastify";
+import yaml from "js-yaml";
 import { posix as pathPosix } from "path";
 import { z } from "zod";
 import prisma from "../lib/prisma";
@@ -428,6 +429,202 @@ function parseDockerPorts(ports: string): string[] {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function extractHostPortFromPortMapping(
+  value: string,
+  options: { allowSinglePortAsHost?: boolean } = {},
+) {
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+  if (!trimmed) return null;
+
+  const dockerPsMatch = trimmed.match(/(?:^|:)(\d+)->/);
+  if (dockerPsMatch?.[1]) return dockerPsMatch[1];
+
+  const mapping = trimmed.split("/")[0]?.trim() ?? trimmed;
+  const parts = mapping.split(":").filter(Boolean);
+
+  if (parts.length === 1) {
+    return options.allowSinglePortAsHost && /^\d+$/.test(parts[0])
+      ? parts[0]
+      : null;
+  }
+
+  const hostPort = parts[parts.length - 2] ?? "";
+  return /^\d+$/.test(hostPort) ? hostPort : null;
+}
+
+function extractHostPortsFromPortMappings(
+  ports: string,
+  options: { allowSinglePortAsHost?: boolean } = {},
+) {
+  return ports
+    .split(",")
+    .map((entry) => extractHostPortFromPortMapping(entry, options))
+    .filter((port): port is string => Boolean(port));
+}
+
+function extractHostPortsFromStoredPorts(value: unknown) {
+  const ports = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : typeof value === "string"
+      ? parseDockerPorts(value)
+      : [];
+
+  return ports
+    .map((entry) => extractHostPortFromPortMapping(entry))
+    .filter((port): port is string => Boolean(port));
+}
+
+function extractComposePublishedHostPorts(composeContent?: string | null) {
+  const content = toOptionalValue(composeContent);
+  if (!content) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(content);
+  } catch {
+    return [];
+  }
+
+  if (typeof parsed !== "object" || parsed === null || !("services" in parsed)) {
+    return [];
+  }
+
+  const services = (parsed as { services?: unknown }).services;
+  if (typeof services !== "object" || services === null) {
+    return [];
+  }
+
+  const hostPorts: string[] = [];
+  for (const service of Object.values(services)) {
+    if (typeof service !== "object" || service === null) continue;
+
+    const ports = (service as { ports?: unknown }).ports;
+    if (!Array.isArray(ports)) continue;
+
+    for (const entry of ports) {
+      if (typeof entry === "string") {
+        const hostPort = extractHostPortFromPortMapping(entry);
+        if (hostPort) hostPorts.push(hostPort);
+        continue;
+      }
+
+      if (typeof entry !== "object" || entry === null) continue;
+
+      const published = (entry as { published?: unknown }).published;
+      const hostPort =
+        typeof published === "number" || typeof published === "string"
+          ? String(published).trim()
+          : "";
+      if (/^\d+$/.test(hostPort)) hostPorts.push(hostPort);
+    }
+  }
+
+  return hostPorts;
+}
+
+function collectRequestedHostPorts(input: z.infer<typeof DeploySchema>) {
+  const hostPorts = [
+    ...extractHostPortsFromPortMappings(input.ports),
+    ...extractHostPortsFromPortMappings(input.portOverride ?? "", {
+      allowSinglePortAsHost: true,
+    }),
+  ];
+
+  if (input.sourceType === "MANUAL" && input.deployMode === "COMPOSE") {
+    hostPorts.push(...extractComposePublishedHostPorts(input.composeContent));
+  }
+
+  return hostPorts;
+}
+
+async function assertRequestedHostPortsAvailable(input: {
+  deployInput: z.infer<typeof DeploySchema>;
+  serverId: string;
+}) {
+  const requestedHostPorts = collectRequestedHostPorts(input.deployInput);
+  if (requestedHostPorts.length === 0) return;
+
+  const seen = new Set<string>();
+  const duplicateRequestedPort = requestedHostPorts.find((port) => {
+    if (seen.has(port)) return true;
+    seen.add(port);
+    return false;
+  });
+
+  if (duplicateRequestedPort) {
+    throw new Error(
+      `Host port ${duplicateRequestedPort} is mapped more than once in this deployment.`,
+    );
+  }
+
+  const containers = await prisma.container.findMany({
+    where: {
+      serverId: input.serverId,
+      status: { not: "ERROR" },
+    },
+    select: {
+      name: true,
+      ports: true,
+    },
+  });
+
+  for (const container of containers) {
+    const usedHostPorts = extractHostPortsFromStoredPorts(container.ports);
+    const conflictingPort = requestedHostPorts.find((port) =>
+      usedHostPorts.includes(port),
+    );
+
+    if (conflictingPort) {
+      throw new Error(
+        `Host port ${conflictingPort} is already used by container "${container.name}" on the selected server.`,
+      );
+    }
+  }
+}
+
+function shouldValidateRequestedContainerName(
+  input: z.infer<typeof DeploySchema>,
+) {
+  const gitBuildType = resolveGitBuildType(input);
+  return input.deployMode !== "COMPOSE" && gitBuildType !== "COMPOSE";
+}
+
+function normalizeContainerNameForConflict(value: string) {
+  return value.trim().replace(/^\//, "").toLowerCase();
+}
+
+async function assertRequestedContainerNameAvailable(input: {
+  deployInput: z.infer<typeof DeploySchema>;
+  serverId: string;
+}) {
+  if (!shouldValidateRequestedContainerName(input.deployInput)) return;
+
+  const requestedName = normalizeContainerNameForConflict(
+    input.deployInput.name,
+  );
+  if (!requestedName) return;
+
+  const containers = await prisma.container.findMany({
+    where: {
+      serverId: input.serverId,
+      status: { not: "ERROR" },
+    },
+    select: {
+      name: true,
+    },
+  });
+  const conflict = containers.find(
+    (container) =>
+      normalizeContainerNameForConflict(container.name) === requestedName,
+  );
+
+  if (conflict) {
+    throw new Error(
+      `Container name "${input.deployInput.name}" is already used on the selected server.`,
+    );
+  }
 }
 
 function parseEnvironmentVariables(env: string): string[] {
@@ -2651,6 +2848,45 @@ export async function containerRoutes(app: FastifyInstance) {
           return reply
             .status(404)
             .send({ success: false, error: "Git provider not found" });
+        }
+      }
+
+      const shouldValidateHostPorts =
+        collectRequestedHostPorts(body.data).length > 0;
+      const shouldValidateContainerName =
+        shouldValidateRequestedContainerName(body.data);
+
+      if (shouldValidateHostPorts || shouldValidateContainerName) {
+        try {
+          await syncContainersForServers([server], req.userId, (event) =>
+            recordDockerCommandTiming(app, event),
+          );
+
+          if (shouldValidateContainerName) {
+            await assertRequestedContainerNameAvailable({
+              deployInput: body.data,
+              serverId,
+            });
+          }
+
+          if (shouldValidateHostPorts) {
+            await assertRequestedHostPortsAvailable({
+              deployInput: body.data,
+              serverId,
+            });
+          }
+        } catch (error) {
+          const errorMessage = redactSecret(
+            error instanceof Error
+              ? error.message
+              : "Failed to validate requested deployment target",
+            accessToken,
+          );
+
+          return reply.status(400).send({
+            success: false,
+            error: errorMessage,
+          });
         }
       }
 

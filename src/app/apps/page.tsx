@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import SearchField from "@/components/SearchField";
 import SearchableSelect from "@/components/SearchableSelect";
+import ToastViewport from "@/components/ToastViewport";
 import {
   Boxes,
   Package,
@@ -50,6 +51,8 @@ import {
   storeServerSelection,
   writeCachedPageData,
 } from "@/lib/page-state";
+import type { ToastInput } from "@/lib/use-toast-manager";
+import { useToastManager } from "@/lib/use-toast-manager";
 
 type InstallMode = "template" | "custom";
 
@@ -551,12 +554,14 @@ function InstallModal({
   serverList,
   onClose,
   onSuccess,
+  onToast,
 }: {
   template: AppTemplate | null;
   initialMode: InstallMode;
   serverList: Server[];
   onClose: () => void;
   onSuccess: () => void;
+  onToast: (toast: ToastInput) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<InstallMode>(initialMode);
@@ -953,7 +958,14 @@ function InstallModal({
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Install failed");
+      const message = err instanceof Error ? err.message : "Install failed";
+      setError(message);
+      onToast({
+        tone: "error",
+        title: "App Installer",
+        message,
+        showProgress: true,
+      });
     } finally {
       setLoading(false);
     }
@@ -1670,6 +1682,7 @@ function InstallModal({
 }
 
 export default function AppsPage() {
+  const { toasts, pushToast, dismissToast } = useToastManager();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
   const [templates, setTemplates] = useState<AppTemplate[]>([]);
@@ -1820,12 +1833,18 @@ export default function AppsPage() {
           serverList={serverList}
           onClose={() => setInstallTarget(null)}
           onSuccess={load}
+          onToast={pushToast}
         />
       )}
       <DashboardLayout
         title="App Installer"
         subtitle="Preset-based Docker installs with custom image, env, volume, and path controls"
       >
+        <ToastViewport
+          toasts={toasts}
+          onClose={dismissToast}
+          position="top-right"
+        />
         <div
           className="animate-slide-in"
           style={{ display: "flex", flexDirection: "column", gap: 16 }}

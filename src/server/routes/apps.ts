@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { $Enums } from "@prisma/client";
+import { $Enums, type Server } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { authenticate, requireApiKeyPermission } from "../middleware/auth";
 import { auditLog } from "../services/audit.service";
@@ -147,6 +147,43 @@ function parseCsvBindings(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeContainerNameForConflict(value: string) {
+  return value.trim().replace(/^\//, "").toLowerCase();
+}
+
+function extractHostPortFromPortMapping(value: string) {
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+  if (!trimmed) return null;
+
+  const dockerPsMatch = trimmed.match(/(?:^|:)(\d+)->/);
+  if (dockerPsMatch?.[1]) return dockerPsMatch[1];
+
+  const mapping = trimmed.split("/")[0]?.trim() ?? trimmed;
+  const parts = mapping.split(":").filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const hostPort = parts[parts.length - 2] ?? "";
+  return /^\d+$/.test(hostPort) ? hostPort : null;
+}
+
+function extractHostPortsFromPortMappings(value?: string | null) {
+  return parseCsvBindings(value ?? "")
+    .map(extractHostPortFromPortMapping)
+    .filter((port): port is string => Boolean(port));
+}
+
+function extractHostPortsFromStoredPorts(value: unknown) {
+  const ports = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : typeof value === "string"
+      ? parseCsvBindings(value)
+      : [];
+
+  return ports
+    .map(extractHostPortFromPortMapping)
+    .filter((port): port is string => Boolean(port));
+}
+
 function parseEnvironmentVariables(env: string): string[] {
   return env
     .split("\n")
@@ -247,6 +284,110 @@ async function upsertAppInstallerContainer(input: {
       serverId: input.serverId,
     },
   });
+}
+
+async function assertAppInstallTargetAvailable(input: {
+  server: Server;
+  containerName: string;
+  ports: string;
+}) {
+  const requestedName = normalizeContainerNameForConflict(input.containerName);
+  const requestedHostPorts = extractHostPortsFromPortMappings(input.ports);
+
+  const seenHostPorts = new Set<string>();
+  const duplicateRequestedPort = requestedHostPorts.find((port) => {
+    if (seenHostPorts.has(port)) return true;
+    seenHostPorts.add(port);
+    return false;
+  });
+
+  if (duplicateRequestedPort) {
+    throw new Error(
+      `Host port ${duplicateRequestedPort} is mapped more than once in this install.`,
+    );
+  }
+
+  const runtimeContainers = await ssh.listDockerContainers(input.server);
+  for (const container of runtimeContainers) {
+    if (
+      normalizeContainerNameForConflict(container.name) === requestedName
+    ) {
+      throw new Error(
+        `Container name "${input.containerName}" is already used on the selected server.`,
+      );
+    }
+
+    const conflictingPort = requestedHostPorts.find((port) =>
+      extractHostPortsFromPortMappings(container.ports).includes(port),
+    );
+    if (conflictingPort) {
+      throw new Error(
+        `Host port ${conflictingPort} is already used by container "${container.name}" on the selected server.`,
+      );
+    }
+  }
+
+  const containers = await prisma.container.findMany({
+    where: {
+      serverId: input.server.id,
+      status: { not: "ERROR" },
+    },
+    select: {
+      name: true,
+      ports: true,
+    },
+  });
+
+  for (const container of containers) {
+    if (
+      normalizeContainerNameForConflict(container.name) === requestedName
+    ) {
+      throw new Error(
+        `Container name "${input.containerName}" is already used on the selected server.`,
+      );
+    }
+
+    const conflictingPort = requestedHostPorts.find((port) =>
+      extractHostPortsFromStoredPorts(container.ports).includes(port),
+    );
+    if (conflictingPort) {
+      throw new Error(
+        `Host port ${conflictingPort} is already used by container "${container.name}" on the selected server.`,
+      );
+    }
+  }
+
+  const activeInstalls = await prisma.appInstall.findMany({
+    where: {
+      serverId: input.server.id,
+      status: { notIn: ["FAILED", "REMOVED"] },
+    },
+    select: {
+      appName: true,
+      containerName: true,
+      port: true,
+    },
+  });
+
+  for (const install of activeInstalls) {
+    if (
+      install.containerName &&
+      normalizeContainerNameForConflict(install.containerName) === requestedName
+    ) {
+      throw new Error(
+        `Container name "${input.containerName}" is already used by app install "${install.appName}" on the selected server.`,
+      );
+    }
+
+    const conflictingPort = requestedHostPorts.find((port) =>
+      extractHostPortsFromPortMappings(install.port ?? "").includes(port),
+    );
+    if (conflictingPort) {
+      throw new Error(
+        `Host port ${conflictingPort} is already used by app install "${install.appName}" on the selected server.`,
+      );
+    }
+  }
 }
 
 function classifyRuntimeError(
@@ -886,6 +1027,22 @@ export async function appsRoutes(app: FastifyInstance) {
       finalVolumes =
         resolveIsolatedTemplateVolumes(finalAppId, containerName) ||
         finalVolumes;
+    }
+
+    try {
+      await assertAppInstallTargetAvailable({
+        server,
+        containerName,
+        ports: finalPorts,
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to validate app install target",
+      });
     }
 
     const install = await prisma.appInstall.create({

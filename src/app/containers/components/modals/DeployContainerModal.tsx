@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, RocketIcon, X } from "lucide-react";
 import SearchableSelect from "@/components/SearchableSelect";
 import type { ProcessLogsModalState } from "@/components/ProcessLogsModal";
+import type { ToastInput } from "@/lib/use-toast-manager";
 import {
   containers as containersApi,
   gitProvidersApi,
@@ -39,6 +40,7 @@ interface DeployContainerModalProps {
   onDeployed: () => void;
   onProcessOpen?: (state: ProcessLogsModalState) => void;
   onProcessUpdate?: (state: Partial<ProcessLogsModalState>) => void;
+  onToast?: (toast: ToastInput) => void;
 }
 
 type DeployChoice = Exclude<ContainerSourceType, "APP_INSTALLER"> | null;
@@ -206,6 +208,7 @@ export default function DeployContainerModal({
   onDeployed,
   onProcessOpen,
   onProcessUpdate,
+  onToast,
 }: DeployContainerModalProps) {
   const router = useRouter();
   const [choice, setChoice] = useState<DeployChoice>(null);
@@ -1056,6 +1059,12 @@ export default function DeployContainerModal({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Deploy failed";
       setError(message);
+      onToast?.({
+        tone: "error",
+        title: "Container Deploy",
+        message,
+        showProgress: true,
+      });
       failDeployTimelineModal({
         onProcessUpdate,
         name: form.name,
