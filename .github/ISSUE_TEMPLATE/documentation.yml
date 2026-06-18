@@ -1,0 +1,54 @@
+name: Documentation
+description: Report missing, incorrect, or unclear documentation
+title: "[Docs]: "
+labels:
+  - documentation
+assignees:
+  - KodekaTeamOfficial
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve Doktainer's documentation.
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Documentation issue
+      description: What is missing, incorrect, or unclear?
+      placeholder: |
+        The installation guide is missing Docker Compose examples.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: How should the documentation be improved?
+      placeholder: |
+        Add a section explaining how to deploy Doktainer behind Cloudflare.
+    validations:
+      required: true
+
+  - type: input
+    id: page
+    attributes:
+      label: Related page or file
+      description: Link or path to the affected documentation.
+      placeholder: README.md or docs/installation.md
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Screenshots, examples, references, etc.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched for existing documentation issues before creating this report.
+          required: true
