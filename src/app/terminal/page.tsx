@@ -41,10 +41,12 @@ function readStoredTabs(): Tab[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Tab[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((tab) => ({
-      ...tab,
-      label: tab.label || tab.serverName,
-    }));
+    return parsed
+      .filter((tab) => !tab.sessionId.startsWith("container-"))
+      .map((tab) => ({
+        ...tab,
+        label: tab.label || tab.serverName,
+      }));
   } catch {
     return [];
   }

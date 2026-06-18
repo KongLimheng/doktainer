@@ -2769,14 +2769,18 @@ export const terminal = {
       stderr: string;
       exitCode: number;
     }>("/terminal/exec", { serverId, command }),
-  wsTicket: (serverId: string, sessionId?: string) =>
+  wsTicket: (
+    serverId: string,
+    sessionId?: string,
+    target?: { type: "shell" } | { type: "command"; command: string },
+  ) =>
     post<{
       success: boolean;
       data: {
         ticket: string;
         expiresAt: string;
       };
-    }>("/terminal/ws-ticket", { serverId, sessionId }),
+    }>("/terminal/ws-ticket", { serverId, sessionId, target }),
   /** Returns WebSocket URL for interactive shell */
   wsUrl: (
     serverId: string,

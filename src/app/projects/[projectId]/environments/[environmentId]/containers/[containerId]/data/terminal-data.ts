@@ -32,7 +32,7 @@ export function createTerminalData(
   const inspect = isRecord(detail?.inspect) ? detail.inspect : {};
   const config = getRecord(inspect, "Config");
   const state = getRecord(inspect, "State");
-  const workingDirectory = getString(config?.WorkingDir, "/app");
+  const workingDirectory = getString(config?.WorkingDir, "/");
   const shell = "/bin/sh";
   const isRunning = container.status === "RUNNING";
 

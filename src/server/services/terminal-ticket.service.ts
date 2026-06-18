@@ -8,9 +8,14 @@ export interface TerminalSocketTicket {
   organizationId?: string;
   serverId: string;
   sessionId?: string;
+  target?: TerminalSocketTarget;
   createdAt: number;
   expiresAt: number;
 }
+
+export type TerminalSocketTarget =
+  | { type: "shell" }
+  | { type: "command"; command: string };
 
 const terminalSocketTickets = new Map<string, TerminalSocketTicket>();
 
@@ -27,6 +32,7 @@ export function issueTerminalSocketTicket(input: {
   organizationId?: string;
   serverId: string;
   sessionId?: string;
+  target?: TerminalSocketTarget;
 }): TerminalSocketTicket {
   const now = Date.now();
   pruneExpiredTerminalSocketTickets(now);
@@ -37,6 +43,7 @@ export function issueTerminalSocketTicket(input: {
     organizationId: input.organizationId,
     serverId: input.serverId,
     sessionId: input.sessionId,
+    target: input.target,
     createdAt: now,
     expiresAt: now + TERMINAL_SOCKET_TICKET_TTL_MS,
   };

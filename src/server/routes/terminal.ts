@@ -10,6 +10,7 @@ import {
   consumeTerminalSocketTicket,
   issueTerminalSocketTicket,
 } from "../services/terminal-ticket.service";
+import type { TerminalSocketTarget } from "../services/terminal-ticket.service";
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const TERMINAL_EXEC_TIMEOUT_MS = 20_000;
@@ -50,6 +51,7 @@ interface TerminalSession {
   serverId: string;
   serverName: string;
   serverIp: string;
+  target: TerminalSocketTarget;
   shellStream: TerminalShellStream;
   createdAt: number;
   lastActiveAt: number;
@@ -149,22 +151,28 @@ async function createTerminalSession(
   cols: number,
   rows: number,
   sessionId?: string,
+  target: TerminalSocketTarget = { type: "shell" },
 ) {
   const ssh = await getConnection(server);
   const id = sessionId || randomUUID();
 
   const shellStream = await new Promise<TerminalShellStream>(
     (resolve, reject) => {
-    ssh.connection!.shell(
-      { term: "xterm-256color", cols, rows },
-      (err, stream) => {
+      const handleStream = (err: Error | undefined, stream: unknown) => {
         if (err) {
           reject(err);
           return;
         }
         resolve(stream as TerminalShellStream);
-      },
-    );
+      };
+
+      const pty = { term: "xterm-256color", cols, rows };
+      if (target.type === "command") {
+        ssh.connection!.exec(target.command, { pty }, handleStream);
+        return;
+      }
+
+      ssh.connection!.shell(pty, handleStream);
     },
   );
 
@@ -174,6 +182,7 @@ async function createTerminalSession(
     serverId: server.id,
     serverName: server.name,
     serverIp: server.ip,
+    target,
     shellStream,
     createdAt: Date.now(),
     lastActiveAt: Date.now(),
@@ -193,7 +202,10 @@ export async function terminalRoutes(app: FastifyInstance) {
   app.get("/sessions", { preHandler: terminalAccess }, async (req, reply) => {
     pruneExpiredSessions();
     const sessions = [...terminalSessions.values()]
-      .filter((session) => session.userId === req.userId)
+      .filter(
+        (session) =>
+          session.userId === req.userId && session.target.type === "shell",
+      )
       .map(getPublicSession)
       .sort((left, right) =>
         right.lastActiveAt.localeCompare(left.lastActiveAt),
@@ -224,6 +236,15 @@ export async function terminalRoutes(app: FastifyInstance) {
       .object({
         serverId: z.string().min(1),
         sessionId: z.string().trim().min(1).max(128).optional(),
+        target: z
+          .discriminatedUnion("type", [
+            z.object({ type: z.literal("shell") }),
+            z.object({
+              type: z.literal("command"),
+              command: z.string().trim().min(1).max(4096),
+            }),
+          ])
+          .optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -232,7 +253,7 @@ export async function terminalRoutes(app: FastifyInstance) {
         .send({ success: false, error: body.error.flatten() });
     }
 
-    const { serverId, sessionId } = body.data;
+    const { serverId, sessionId, target } = body.data;
     const server = await getAccessibleServer(
       req.userId,
       serverId,
@@ -251,6 +272,7 @@ export async function terminalRoutes(app: FastifyInstance) {
       organizationId: req.organizationId,
       serverId,
       sessionId,
+      target: target ?? { type: "shell" },
     });
 
     return reply.send({
@@ -388,6 +410,7 @@ export async function terminalRoutes(app: FastifyInstance) {
             parsedCols,
             parsedRows,
             sessionId,
+            socketTicket.target,
           );
         }
 
@@ -443,14 +466,22 @@ export async function terminalRoutes(app: FastifyInstance) {
         socket.on("close", () => {
           if (session) {
             session.lastActiveAt = Date.now();
-            detachSocket(session);
+            if (session.target.type === "command") {
+              destroySession(session.id);
+            } else {
+              detachSocket(session);
+            }
           }
         });
 
         socket.on("error", () => {
           if (session) {
             session.lastActiveAt = Date.now();
-            detachSocket(session);
+            if (session.target.type === "command") {
+              destroySession(session.id);
+            } else {
+              detachSocket(session);
+            }
           }
         });
 

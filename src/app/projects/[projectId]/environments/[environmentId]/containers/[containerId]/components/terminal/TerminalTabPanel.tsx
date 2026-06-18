@@ -31,7 +31,7 @@ type StoredTerminalSession = {
 const INPUT_CHUNK_SIZE = 8192;
 const INPUT_BACKPRESSURE_THRESHOLD = 256 * 1024;
 const IMMEDIATE_INPUT_MAX_LENGTH = 4;
-const STORAGE_KEY = "app_container_terminal_sessions_v1";
+const STORAGE_KEY = "app_container_terminal_sessions_v3";
 
 const summaryToneColor: Record<
   TerminalTabData["summaries"][number]["tone"],
@@ -67,6 +67,20 @@ function formatTime(date: Date) {
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function createContainerShellCommand({
+  execTarget,
+  shell,
+  workingDirectory,
+}: Pick<TerminalTabData, "execTarget" | "shell" | "workingDirectory">) {
+  const initialPath = workingDirectory || "/";
+  const enterWorkingDirectory = `cd ${shellQuote(initialPath)} 2>/dev/null || cd /`;
+  const startShell = `exec ${shellQuote(shell)}`;
+
+  return `docker exec -it ${shellQuote(execTarget)} ${shellQuote(
+    shell,
+  )} -c ${shellQuote(`${enterWorkingDirectory}; ${startShell}`)}`;
 }
 
 function createSessionId(terminal: TerminalTabData) {
@@ -106,15 +120,6 @@ function writeStoredSession(storageId: string, session: StoredTerminalSession) {
 
 function getInitialSession(terminal: TerminalTabData): StoredTerminalSession {
   const storageId = getStorageId(terminal);
-  const stored = readStoredSessions()[storageId];
-
-  if (stored?.id) {
-    return {
-      id: stored.id,
-      initialized: Boolean(stored.initialized),
-    };
-  }
-
   const nextSession = {
     id: createSessionId(terminal),
     initialized: false,
@@ -267,6 +272,8 @@ function ContainerTerminalPane({
   useEffect(() => {
     if (!containerRef.current || !terminal.canExecute) return;
     let destroyed = false;
+    let wsForEffect: WebSocket | null = null;
+    let termForEffect: import("@xterm/xterm").Terminal | null = null;
     isDisposedRef.current = false;
     onStatusChange("connecting");
 
@@ -315,6 +322,7 @@ function ContainerTerminalPane({
       }
 
       termRef.current = term;
+      termForEffect = term;
       fitRef.current = fitAddon;
       scheduleResize();
 
@@ -331,6 +339,14 @@ function ContainerTerminalPane({
       const ticketResponse = await terminalApi.wsTicket(
         terminal.serverId,
         session.id,
+        {
+          type: "command",
+          command: createContainerShellCommand({
+            execTarget: terminal.execTarget,
+            shell: terminal.shell,
+            workingDirectory: terminal.workingDirectory,
+          }),
+        },
       );
       if (destroyed) return undefined;
 
@@ -339,9 +355,12 @@ function ContainerTerminalPane({
         ticket: ticketResponse.data.ticket,
       });
       const ws = new WebSocket(wsUrl);
+      wsForEffect = ws;
       wsRef.current = ws;
+      const isCurrentSocket = () => !destroyed && wsRef.current === ws;
 
       ws.onopen = () => {
+        if (!isCurrentSocket()) return;
         onStatusChange("connected");
         onSenderChange(sendInput);
         enqueueTerminalOutput("\x1b[32mSSH connection established\x1b[0m\r\n");
@@ -349,11 +368,6 @@ function ContainerTerminalPane({
           `\x1b[36mOpening container shell: ${terminal.execTarget}\x1b[0m\r\n`,
         );
         if (shouldEnterContainer) {
-          sendInput(
-            `docker exec -it ${shellQuote(terminal.execTarget)} ${shellQuote(
-              terminal.shell,
-            )}\r`,
-          );
           onSessionInitialized();
         } else {
           enqueueTerminalOutput(
@@ -364,6 +378,7 @@ function ContainerTerminalPane({
       };
 
       ws.onmessage = (ev) => {
+        if (!isCurrentSocket()) return;
         try {
           const msg = JSON.parse(ev.data as string);
           if (msg.type === "ready" || msg.type === "data") {
@@ -385,11 +400,13 @@ function ContainerTerminalPane({
       };
 
       ws.onerror = () => {
+        if (!isCurrentSocket()) return;
         onStatusChange("error");
         enqueueTerminalOutput("\x1b[31m\r\nWebSocket error\x1b[0m\r\n");
       };
 
       ws.onclose = () => {
+        if (!isCurrentSocket()) return;
         onStatusChange("disconnected");
         onSenderChange(null);
         enqueueTerminalOutput("\x1b[33m\r\n[Connection closed]\x1b[0m\r\n");
@@ -430,11 +447,21 @@ function ContainerTerminalPane({
       encoderRef.current = null;
       resizeObserverRef.current?.disconnect();
       cleanup.then((fn) => fn?.());
-      wsRef.current?.close();
-      termRef.current?.dispose();
-      termRef.current = null;
-      wsRef.current = null;
-      fitRef.current = null;
+      if (wsForEffect) {
+        wsForEffect.onopen = null;
+        wsForEffect.onmessage = null;
+        wsForEffect.onerror = null;
+        wsForEffect.onclose = null;
+        wsForEffect.close();
+        if (wsRef.current === wsForEffect) {
+          wsRef.current = null;
+        }
+      }
+      termForEffect?.dispose();
+      if (termRef.current === termForEffect) {
+        termRef.current = null;
+        fitRef.current = null;
+      }
     };
   }, [
     enqueueTerminalOutput,
@@ -447,6 +474,7 @@ function ContainerTerminalPane({
     session.initialized,
     terminal.canExecute,
     terminal.execTarget,
+    terminal.workingDirectory,
     terminal.serverId,
     terminal.shell,
   ]);
