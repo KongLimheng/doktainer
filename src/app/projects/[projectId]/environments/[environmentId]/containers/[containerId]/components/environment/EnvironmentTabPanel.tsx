@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTablePagination } from "@/lib/use-table-pagination";
 import {
   CheckCircle2,
@@ -111,6 +111,42 @@ export default function EnvironmentTabPanel({
   const [editorNotice, setEditorNotice] = useState<EditorNotice | null>(null);
   const editorContent = editorDraft.content;
   const editorStatus = editorDraft.status;
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setEditorDraft((current) => {
+        const isDirty =
+          current.status === "saved"
+            ? false
+            : current.content !== current.source;
+
+        if (isDirty) {
+          return current;
+        }
+
+        if (
+          current.source === environment.editor.content &&
+          current.content === environment.editor.content
+        ) {
+          return current;
+        }
+
+        return {
+          source: environment.editor.content,
+          content: environment.editor.content,
+          status: "idle",
+        };
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    environment.editor.content,
+    environment.editor.found,
+    environment.editor.path,
+    environment.editor.source,
+  ]);
+
   const pagination = useTablePagination({
     items: environment.variables,
     pageSize: 6,
