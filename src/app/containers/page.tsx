@@ -78,7 +78,9 @@ function createFailedRebuildTimeline(activeStep: number): ProcessLogStep[] {
 export default function ContainersPage() {
   const [data, setData] = useState<Container[]>([]);
   const [serverList, setServerList] = useState<Server[]>([]);
-  const [selectedServerId, setSelectedServerId] = useState("");
+  const [selectedServerId, setSelectedServerId] = useState(() =>
+    readStoredServerSelection(PAGE_KEY),
+  );
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -169,13 +171,15 @@ export default function ContainersPage() {
 
   useEffect(() => {
     const storedServerId = readStoredServerSelection(PAGE_KEY);
-    setSelectedServerId(storedServerId);
-    const hasCache = applyCachedState(storedServerId);
-    void load({
-      sync: true,
-      serverId: storedServerId,
-      silent: hasCache,
+    const frame = window.requestAnimationFrame(() => {
+      const hasCache = applyCachedState(storedServerId);
+      void load({
+        serverId: storedServerId,
+        silent: hasCache,
+      });
     });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [applyCachedState, load]);
 
   useEffect(() => {
@@ -198,7 +202,7 @@ export default function ContainersPage() {
     storeServerSelection(PAGE_KEY, serverId);
     setSelectedServerId(serverId);
     const hasCache = applyCachedState(serverId);
-    await load({ sync: true, serverId, silent: hasCache });
+    await load({ serverId, silent: hasCache });
   };
 
   const runAction = async (

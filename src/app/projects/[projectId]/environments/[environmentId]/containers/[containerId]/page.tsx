@@ -15,7 +15,9 @@ import {
   projectsApi,
   type Container,
   type ContainerDetails,
+  type ContainerProcess,
   type ContainerProjectEnvFile,
+  type ContainerRuntimeStats,
   type Domain,
   type ProjectEnvironmentRecord,
   type ProjectRecord,
@@ -63,6 +65,10 @@ type PendingConfirmAction = {
   note?: string;
   onConfirm: () => void;
 };
+
+const LOGS_REFRESH_INTERVAL_MS = 10000;
+const LOGS_REFRESH_TAIL_LINES = 50;
+const LOGS_STREAM_LIMIT = 50;
 
 function formatStatus(value: string) {
   return value.charAt(0) + value.slice(1).toLowerCase();
@@ -215,8 +221,58 @@ function buildFallbackMetrics(container: Container): AppMetric[] {
   ];
 }
 
+type RuntimeMetricSource = {
+  stats: ContainerRuntimeStats;
+  processes?: ContainerProcess[];
+};
+
+function createEmptyRuntimeStats(): ContainerRuntimeStats {
+  return {
+    cpuPercent: 0,
+    memoryPercent: 0,
+    pids: 0,
+    memory: { raw: "" },
+    network: { raw: "" },
+    io: { raw: "" },
+  };
+}
+
+function createRuntimeDetailSnapshot({
+  container,
+  inspect = {},
+  logs = "",
+  processes = [],
+  stats,
+}: {
+  container: Container;
+  inspect?: Record<string, unknown>;
+  logs?: string;
+  processes?: ContainerProcess[];
+  stats: ContainerRuntimeStats;
+}): ContainerDetails {
+  return {
+    container: {
+      id: container.id,
+      name: container.name,
+      image: container.image,
+      status: container.status,
+      dockerId: container.dockerId,
+      serverId: container.serverId,
+    },
+    server: {
+      id: container.serverId,
+      name: container.server?.name ?? "-",
+      ip: container.server?.ip ?? "-",
+    },
+    logs,
+    inspect,
+    stats,
+    processes,
+  };
+}
+
 function buildMetrics(
-  detail: ContainerDetails | null,
+  detail: RuntimeMetricSource | null,
   container: Container,
 ): AppMetric[] {
   if (!detail) return buildFallbackMetrics(container);
@@ -259,7 +315,9 @@ function buildMetrics(
     {
       label: "Processes",
       value: String(detail.stats.pids),
-      subvalue: `${detail.processes.length} visible processes`,
+      subvalue: detail.processes
+        ? `${detail.processes.length} visible processes`
+        : `${detail.stats.pids} running PIDs`,
       tone: "green",
       points: sparkline(Math.max(8, detail.stats.pids)),
     },
@@ -275,6 +333,7 @@ function buildAppDetail({
   runtimeNotice,
   fallbackLogs,
   projectEnv,
+  metrics,
 }: {
   project: ProjectRecord;
   environment: ProjectEnvironmentRecord;
@@ -284,15 +343,17 @@ function buildAppDetail({
   runtimeNotice?: string;
   fallbackLogs?: string;
   projectEnv: ContainerProjectEnvFile | null;
+  metrics?: RuntimeMetricSource | null;
 }): AppDetail {
   const status = formatStatus(container.status);
   const isRunning = container.status === "RUNNING";
+  const metricSource = metrics ?? detail;
   const serverName = detail?.server.name ?? container.server?.name ?? "-";
   const serverIp = detail?.server.ip ?? container.server?.ip ?? "-";
-  const cpu = detail
-    ? `${detail.stats.cpuPercent.toFixed(2)}%`
+  const cpu = metricSource
+    ? `${metricSource.stats.cpuPercent.toFixed(2)}%`
     : (container.cpuUsage ?? "0%");
-  const memory = detail?.stats.memory.used || container.ramUsage || "-";
+  const memory = metricSource?.stats.memory.used || container.ramUsage || "-";
   const rawLogs = detail ? detail.logs : fallbackLogs || runtimeNotice || "";
   const logs = parseRecentLogs(rawLogs, 8);
   const logStream = parseRecentLogs(rawLogs, 100);
@@ -328,7 +389,7 @@ function buildAppDetail({
       recentLogs: logStream,
     }),
     terminal: createTerminalData(container, detail),
-    metrics: buildMetrics(detail, container),
+    metrics: buildMetrics(metricSource, container),
     deployment: {
       status: isRunning ? "Success" : status,
       commit: "-",
@@ -428,6 +489,17 @@ export default function AppContainerDetailPage() {
   const rebuildJobIdRef = useRef<string | null>(null);
   const rebuildCancelRequestedRef = useRef(false);
   const runtimeMetricsInFlightRef = useRef(false);
+  const runtimeDetailRef = useRef<ContainerDetails | null>(null);
+  const environmentRecordRef = useRef<ProjectEnvironmentRecord | null>(null);
+  const projectEnvRef = useRef<ContainerProjectEnvFile | null>(null);
+  const domainsLoadedRef = useRef(false);
+  const domainsLoadingRef = useRef(false);
+  const runtimeDetailLoadedRef = useRef(false);
+  const runtimeDetailLoadingRef = useRef(false);
+  const projectEnvLoadedRef = useRef(false);
+  const projectEnvLoadingRef = useRef(false);
+  const logsLoadedRef = useRef(false);
+  const logsInFlightRef = useRef(false);
   const environmentContainersHref = `/projects/${params.projectId}/environments/${params.environmentId}`;
   const appDetailId = appDetail?.id;
 
@@ -440,59 +512,40 @@ export default function AppContainerDetailPage() {
     setError("");
     setActionError("");
     setRuntimeNotice("");
+    runtimeDetailRef.current = null;
+    projectEnvRef.current = null;
+    domainsLoadedRef.current = false;
+    runtimeDetailLoadedRef.current = false;
+    projectEnvLoadedRef.current = false;
+    logsLoadedRef.current = false;
 
     try {
-      const [
-        projectResponse,
-        containerResponse,
-        detailResult,
-        domainsResponse,
-        projectEnvResponse,
-      ] = await Promise.all([
-        projectsApi.detail(params.projectId),
-        containersApi.get(params.containerId),
-        containersApi
-          .details(params.containerId, 300)
-          .then((response) => ({
-            detail: response.data ?? null,
-            logs: "",
-            notice: "",
-          }))
-          .catch(async (detailsError) => {
-            const message =
-              detailsError instanceof Error
-                ? detailsError.message
-                : "Runtime detail is unavailable.";
-            let logs = "";
+      const [projectResponse, containerResponse, metricsResult] =
+        await Promise.all([
+          projectsApi.detail(params.projectId),
+          containersApi.get(params.containerId),
+          containersApi
+            .metrics(params.containerId)
+            .then((response) => ({
+              metrics: response.data ?? null,
+              notice: "",
+            }))
+            .catch((metricsError) => {
+              const message =
+                metricsError instanceof Error
+                  ? metricsError.message
+                  : "Runtime metrics are unavailable.";
 
-            try {
-              const logResponse = await containersApi.logs(
-                params.containerId,
-                100,
-              );
-              logs = logResponse.data?.logs ?? "";
-            } catch {
-              logs = "";
-            }
-
-            return {
-              detail: null,
-              logs,
-              notice: message,
-            };
-          }),
-        domainsApi
-          .list()
-          .catch(() => ({ success: false, data: [] as Domain[] })),
-        containersApi.projectEnv(params.containerId).catch(() => ({
-          success: false,
-          data: null as ContainerProjectEnvFile | null,
-        })),
-      ]);
+              return {
+                metrics: null,
+                notice: message,
+              };
+            }),
+        ]);
 
       const project = projectResponse.data;
       const container = containerResponse.data;
-      const detail = detailResult.detail;
+      const metrics = metricsResult.metrics;
       const environment = project?.environments.find(
         (item) => item.id === params.environmentId,
       );
@@ -516,17 +569,24 @@ export default function AppContainerDetailPage() {
           project,
           environment,
           container,
-          detail,
-          domains: domainsResponse.data ?? [],
-          runtimeNotice: detailResult.notice,
-          fallbackLogs: detailResult.logs,
-          projectEnv: projectEnvResponse.data ?? null,
+          detail: null,
+          domains: [],
+          runtimeNotice: metricsResult.notice,
+          projectEnv: null,
+          metrics,
         }),
       );
-      if (detailResult.notice) {
-        setRuntimeNotice(detailResult.notice);
+      if (metricsResult.notice) {
+        setRuntimeNotice(metricsResult.notice);
       }
       setContainerRecord(container);
+      environmentRecordRef.current = environment;
+      runtimeDetailRef.current = metrics
+        ? createRuntimeDetailSnapshot({
+            container,
+            stats: metrics.stats,
+          })
+        : null;
     } catch (loadError) {
       setAppDetail(null);
       setContainerRecord(null);
@@ -563,10 +623,16 @@ export default function AppContainerDetailPage() {
     runtimeMetricsInFlightRef.current = true;
 
     try {
-      const response = await containersApi.details(params.containerId, 20);
-      const detail = response.data;
-      const nextCpu = `${detail.stats.cpuPercent.toFixed(2)}%`;
-      const nextMemory = detail.stats.memory.used || container.ramUsage || "-";
+      const response = await containersApi.metrics(params.containerId);
+      const metrics = response.data;
+      const nextCpu = `${metrics.stats.cpuPercent.toFixed(2)}%`;
+      const nextMemory = metrics.stats.memory.used || container.ramUsage || "-";
+      runtimeDetailRef.current = runtimeDetailRef.current
+        ? { ...runtimeDetailRef.current, stats: metrics.stats }
+        : createRuntimeDetailSnapshot({
+            container,
+            stats: metrics.stats,
+          });
 
       setContainerRecord((current) =>
         current
@@ -582,11 +648,7 @@ export default function AppContainerDetailPage() {
         current
           ? {
               ...current,
-              metrics: buildMetrics(detail, container),
-              runtime: createRuntimeData(container, detail),
-              storage: createStorageData(container, detail),
-              advanced: createAdvancedData(container, detail),
-              terminal: createTerminalData(container, detail),
+              metrics: buildMetrics(metrics, container),
               health: {
                 ...current.health,
                 status: "Healthy",
@@ -613,14 +675,187 @@ export default function AppContainerDetailPage() {
     }
   }, [params.containerId]);
 
+  const hydrateDomains = useCallback(async () => {
+    const container = containerRecordRef.current;
+    if (!container || domainsLoadedRef.current || domainsLoadingRef.current) {
+      return;
+    }
+
+    domainsLoadingRef.current = true;
+
+    try {
+      const response = await domainsApi.list();
+      const domains = response.data ?? [];
+      domainsLoadedRef.current = true;
+
+      setAppDetail((current) =>
+        current
+          ? {
+              ...current,
+              domains: getLinkedDomains(domains, container),
+              openUrl:
+                getDomainUrl(domains, container) ??
+                getContainerWebUiUrl(container),
+            }
+          : current,
+      );
+    } catch {
+      domainsLoadedRef.current = true;
+    } finally {
+      domainsLoadingRef.current = false;
+    }
+  }, []);
+
+  const hydrateRuntimeDetail = useCallback(async () => {
+    const container = containerRecordRef.current;
+    if (
+      !container ||
+      runtimeDetailLoadedRef.current ||
+      runtimeDetailLoadingRef.current
+    ) {
+      return;
+    }
+
+    runtimeDetailLoadingRef.current = true;
+
+    try {
+      const [inspectResult, metricsResult, processesResult] =
+        await Promise.allSettled([
+          containersApi.inspect(params.containerId),
+          containersApi.metrics(params.containerId),
+          containersApi.processes(params.containerId),
+        ]);
+      const previous = runtimeDetailRef.current;
+      const stats =
+        metricsResult.status === "fulfilled"
+          ? metricsResult.value.data.stats
+          : (previous?.stats ?? createEmptyRuntimeStats());
+      const detail = createRuntimeDetailSnapshot({
+        container,
+        stats,
+        inspect:
+          inspectResult.status === "fulfilled"
+            ? inspectResult.value.data
+            : (previous?.inspect ?? {}),
+        processes:
+          processesResult.status === "fulfilled"
+            ? processesResult.value.data
+            : (previous?.processes ?? []),
+        logs: previous?.logs ?? "",
+      });
+      runtimeDetailRef.current = detail;
+      runtimeDetailLoadedRef.current = true;
+      setRuntimeNotice("");
+
+      setAppDetail((current) => {
+        const environment = environmentRecordRef.current;
+        if (!current || !environment) return current;
+
+        return {
+          ...current,
+          serverName: detail.server.name,
+          serverIp: detail.server.ip,
+          metrics: buildMetrics(detail, container),
+          runtime: createRuntimeData(container, detail),
+          deployments: createDeploymentsData(container, detail),
+          advanced: createAdvancedData(container, detail),
+          environment: createEnvironmentData({
+            container,
+            detail,
+            environment,
+            projectEnv: projectEnvRef.current,
+          }),
+          storage: createStorageData(container, detail),
+          logsDetail: createLogsData({
+            container,
+            detail,
+            recentLogs: current.logsDetail.streams.map((log) => ({
+              time: log.time,
+              level:
+                log.level === "DEBUG"
+                  ? ("INFO" as const)
+                  : (log.level as RecentLogLine["level"]),
+              message: log.message,
+            })),
+          }),
+          terminal: createTerminalData(container, detail),
+        };
+      });
+    } catch (runtimeError) {
+      setRuntimeNotice(
+        runtimeError instanceof Error
+          ? runtimeError.message
+          : "Runtime detail is unavailable.",
+      );
+    } finally {
+      runtimeDetailLoadingRef.current = false;
+    }
+  }, [params.containerId]);
+
+  const hydrateProjectEnv = useCallback(async () => {
+    const container = containerRecordRef.current;
+    const environment = environmentRecordRef.current;
+    if (
+      !container ||
+      !environment ||
+      projectEnvLoadedRef.current ||
+      projectEnvLoadingRef.current
+    ) {
+      return;
+    }
+
+    projectEnvLoadingRef.current = true;
+
+    try {
+      const response = await containersApi.projectEnv(params.containerId);
+      const projectEnv = response.data ?? null;
+      projectEnvRef.current = projectEnv;
+      projectEnvLoadedRef.current = true;
+
+      setAppDetail((current) =>
+        current
+          ? {
+              ...current,
+              environment: createEnvironmentData({
+                container,
+                detail: runtimeDetailRef.current,
+                environment,
+                projectEnv,
+              }),
+            }
+          : current,
+      );
+    } catch {
+      projectEnvLoadedRef.current = true;
+    } finally {
+      projectEnvLoadingRef.current = false;
+    }
+  }, [params.containerId]);
+
   const refreshLogs = useCallback(async () => {
+    if (logsInFlightRef.current) return;
+
+    logsInFlightRef.current = true;
     setLogsRefreshing(true);
 
     try {
-      const response = await containersApi.logs(params.containerId, 100);
+      const response = await containersApi.logs(
+        params.containerId,
+        LOGS_REFRESH_TAIL_LINES,
+      );
       const rawLogs = response.data?.logs ?? "";
       const nextLogs = parseRecentLogs(rawLogs, 8);
-      const nextLogStream = parseRecentLogs(rawLogs, 100);
+      const nextLogStream = parseRecentLogs(rawLogs, LOGS_STREAM_LIMIT);
+      logsLoadedRef.current = true;
+      runtimeDetailRef.current = runtimeDetailRef.current
+        ? { ...runtimeDetailRef.current, logs: rawLogs }
+        : containerRecord
+          ? createRuntimeDetailSnapshot({
+              container: containerRecord,
+              stats: createEmptyRuntimeStats(),
+              logs: rawLogs,
+            })
+          : null;
 
       setAppDetail((current) =>
         current
@@ -628,11 +863,11 @@ export default function AppContainerDetailPage() {
               ...current,
               logs: nextLogs,
               logsDetail: containerRecord
-                ? createLogsData({
-                    container: containerRecord,
-                    detail: null,
-                    recentLogs: nextLogStream,
-                  })
+                  ? createLogsData({
+                      container: containerRecord,
+                      detail: runtimeDetailRef.current,
+                      recentLogs: nextLogStream,
+                    })
                 : current.logsDetail,
               health: {
                 ...current.health,
@@ -663,6 +898,7 @@ export default function AppContainerDetailPage() {
           : current,
       );
     } finally {
+      logsInFlightRef.current = false;
       setLogsRefreshing(false);
     }
   }, [containerRecord, params.containerId]);
@@ -1100,6 +1336,43 @@ export default function AppContainerDetailPage() {
   }, [load]);
 
   useEffect(() => {
+    if (!appDetailId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (activeTab === "overview" || activeTab === "domains") {
+        void hydrateDomains();
+      }
+
+      if (
+        activeTab === "runtime" ||
+        activeTab === "storage" ||
+        activeTab === "advanced" ||
+        activeTab === "terminal" ||
+        activeTab === "deployments"
+      ) {
+        void hydrateRuntimeDetail();
+      }
+
+      if (activeTab === "environment") {
+        void hydrateProjectEnv();
+      }
+
+      if (activeTab === "logs" && !logsLoadedRef.current) {
+        void refreshLogs();
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    activeTab,
+    appDetailId,
+    hydrateDomains,
+    hydrateProjectEnv,
+    hydrateRuntimeDetail,
+    refreshLogs,
+  ]);
+
+  useEffect(() => {
     if (!appDetailId || containerRecord?.status !== "RUNNING") return;
 
     const intervalId = window.setInterval(() => {
@@ -1124,17 +1397,21 @@ export default function AppContainerDetailPage() {
     if (!logsAutoRefresh) return;
 
     const frame = window.requestAnimationFrame(() => {
-      void refreshLogs();
+      if (activeTab === "logs" && !document.hidden) {
+        void refreshLogs();
+      }
     });
     const intervalId = window.setInterval(() => {
-      void refreshLogs();
-    }, 5000);
+      if (activeTab === "logs" && !document.hidden) {
+        void refreshLogs();
+      }
+    }, LOGS_REFRESH_INTERVAL_MS);
 
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearInterval(intervalId);
     };
-  }, [logsAutoRefresh, refreshLogs]);
+  }, [activeTab, logsAutoRefresh, refreshLogs]);
 
   return (
     <DashboardLayout

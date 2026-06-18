@@ -124,6 +124,222 @@ const ContainerRenamePathSchema = z.object({
 
 const CONTAINER_UPLOAD_CONTENT_BASE64_MAX_LENGTH = 8_000_000;
 const CONTAINER_UPLOAD_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+const CONTAINER_METRICS_CACHE_TTL_MS = 5_000;
+const DOCKER_TIMING_SAMPLE_LIMIT = 100;
+
+type DockerCommandCategory = "list" | "logs" | "inspect" | "stats" | "top";
+type DockerCommandStatus = "success" | "error";
+type DockerCommandTimingEvent = {
+  endpoint: string;
+  category: DockerCommandCategory;
+  serverId: string;
+  serverName?: string;
+  containerId?: string;
+  status: DockerCommandStatus;
+  durationMs: number;
+  timedOut: boolean;
+};
+type DockerCommandTimingSink = (event: DockerCommandTimingEvent) => void;
+
+const dockerTimingStats = new Map<
+  string,
+  { count: number; samples: number[] }
+>();
+
+function isLikelyTimeout(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /timed?\s*out|timeout|aborted|abort/i.test(message);
+}
+
+function percentile95(samples: number[]) {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((left, right) => left - right);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.ceil(sorted.length * 0.95) - 1,
+  );
+  return sorted[index] ?? 0;
+}
+
+function recordDockerCommandTiming(
+  app: FastifyInstance,
+  event: DockerCommandTimingEvent,
+) {
+  const key = `${event.endpoint}:${event.category}:${event.status}`;
+  const current = dockerTimingStats.get(key) ?? { count: 0, samples: [] };
+  const samples = [...current.samples, event.durationMs].slice(
+    -DOCKER_TIMING_SAMPLE_LIMIT,
+  );
+  const count = current.count + 1;
+  dockerTimingStats.set(key, { count, samples });
+
+  app.log.info(
+    {
+      event: "docker_command_timing",
+      endpoint: event.endpoint,
+      category: event.category,
+      serverId: event.serverId,
+      serverName: event.serverName,
+      containerId: event.containerId,
+      status: event.status,
+      durationMs: event.durationMs,
+      timedOut: event.timedOut,
+      count,
+      p95DurationMs: percentile95(samples),
+      sampleSize: samples.length,
+    },
+    "Docker command timing",
+  );
+}
+
+async function measureDockerCommand<T>(
+  sink: DockerCommandTimingSink | undefined,
+  event: Omit<DockerCommandTimingEvent, "durationMs" | "status" | "timedOut">,
+  operation: () => Promise<T>,
+) {
+  const startedAt = Date.now();
+
+  try {
+    const result = await operation();
+    sink?.({
+      ...event,
+      status: "success",
+      durationMs: Date.now() - startedAt,
+      timedOut: false,
+    });
+    return result;
+  } catch (error) {
+    sink?.({
+      ...event,
+      status: "error",
+      durationMs: Date.now() - startedAt,
+      timedOut: isLikelyTimeout(error),
+    });
+    throw error;
+  }
+}
+
+export type ContainerMetricsPayload = {
+  container: {
+    id: string;
+    name: string;
+    status: ContainerStatus;
+    dockerId: string | null;
+    serverId: string;
+  };
+  stats: Awaited<ReturnType<typeof ssh.dockerStats>>;
+  sampledAt: string;
+};
+
+type ContainerMetricsCacheEntry = {
+  expiresAt: number;
+  promise: Promise<ContainerMetricsPayload>;
+};
+
+const containerMetricsCache = new Map<string, ContainerMetricsCacheEntry>();
+
+type ReadContainerMetricsWithCacheArgs = {
+  organizationId?: string;
+  serverId: string;
+  serverName?: string;
+  containerId: string;
+  containerName: string;
+  containerStatus: ContainerStatus;
+  dockerId: string | null;
+  runtimeId: string;
+  loadStats: () => Promise<Awaited<ReturnType<typeof ssh.dockerStats>>>;
+};
+
+function getContainerMetricsCacheKey(args: {
+  organizationId?: string;
+  serverId: string;
+  containerId: string;
+  runtimeId: string;
+}) {
+  return [
+    args.organizationId ?? "unknown-organization",
+    args.serverId,
+    args.containerId,
+    args.runtimeId,
+  ].join(":");
+}
+
+export function invalidateContainerMetricsCache(args: {
+  organizationId?: string;
+  serverId: string;
+  containerId: string;
+}) {
+  const prefix = [
+    args.organizationId ?? "unknown-organization",
+    args.serverId,
+    args.containerId,
+    "",
+  ].join(":");
+
+  for (const key of containerMetricsCache.keys()) {
+    if (key.startsWith(prefix)) {
+      containerMetricsCache.delete(key);
+    }
+  }
+}
+
+export function clearContainerMetricsCacheForTest() {
+  containerMetricsCache.clear();
+}
+
+export async function readContainerMetricsWithCache({
+  organizationId,
+  serverId,
+  containerId,
+  containerName,
+  containerStatus,
+  dockerId,
+  runtimeId,
+  loadStats,
+}: ReadContainerMetricsWithCacheArgs): Promise<ContainerMetricsPayload> {
+  const cacheKey = getContainerMetricsCacheKey({
+    organizationId,
+    serverId,
+    containerId,
+    runtimeId,
+  });
+  const now = Date.now();
+  const cached = containerMetricsCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  let entry: ContainerMetricsCacheEntry;
+  const promise = loadStats().then((stats): ContainerMetricsPayload => {
+    entry.expiresAt = Date.now() + CONTAINER_METRICS_CACHE_TTL_MS;
+
+    return {
+      container: {
+        id: containerId,
+        name: containerName,
+        status: containerStatus,
+        dockerId,
+        serverId,
+      },
+      stats,
+      sampledAt: new Date().toISOString(),
+    };
+  });
+  entry = {
+    expiresAt: Number.POSITIVE_INFINITY,
+    promise,
+  };
+
+  containerMetricsCache.set(cacheKey, entry);
+
+  try {
+    return await promise;
+  } catch (error) {
+    containerMetricsCache.delete(cacheKey);
+    throw error;
+  }
+}
 
 const ContainerUploadFileSchema = z.object({
   directoryPath: z.string().min(1).max(2048),
@@ -801,6 +1017,7 @@ async function syncContainersForServers(
     updatedAt: Date;
   }>,
   userId?: string,
+  timingSink?: DockerCommandTimingSink,
 ) {
   const summary: Array<{
     serverId: string;
@@ -812,7 +1029,16 @@ async function syncContainersForServers(
     const pendingNotifications: Array<Promise<unknown>> = [];
     let actualContainers;
     try {
-      actualContainers = await ssh.listDockerContainers(server);
+      actualContainers = await measureDockerCommand(
+        timingSink,
+        {
+          endpoint: "containers.sync",
+          category: "list",
+          serverId: server.id,
+          serverName: server.name,
+        },
+        () => ssh.listDockerContainers(server),
+      );
     } catch (error) {
       throw new Error(
         error instanceof Error
@@ -1292,7 +1518,11 @@ export async function containerRoutes(app: FastifyInstance) {
       }
 
       try {
-        const summary = await syncContainersForServers(servers, req.userId);
+        const summary = await syncContainersForServers(
+          servers,
+          req.userId,
+          (event) => recordDockerCommandTiming(app, event),
+        );
 
         const containers = await prisma.container.findMany({
           where: {
@@ -2081,6 +2311,54 @@ export async function containerRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: container });
   });
 
+  // GET /containers/:id/metrics - lightweight runtime metrics for polling.
+  app.get(
+    "/:id/metrics",
+    { preHandler: containerReadAccess },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const container = await getAccessibleContainer(id, req.organizationId);
+      if (!container)
+        return reply
+          .status(404)
+          .send({ success: false, error: "Container not found" });
+
+      const runtimeId = container.dockerId || container.name;
+
+      try {
+        const data = await readContainerMetricsWithCache({
+          organizationId: req.organizationId,
+          serverId: container.serverId,
+          serverName: container.server.name,
+          containerId: container.id,
+          containerName: container.name,
+          containerStatus: container.status,
+          dockerId: container.dockerId,
+          runtimeId,
+          loadStats: () =>
+            measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.metrics",
+                category: "stats",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () => ssh.dockerStats(container.server, runtimeId),
+            ),
+        });
+
+        return reply.send({ success: true, data });
+      } catch (err: unknown) {
+        return reply.status(500).send({
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to load metrics",
+        });
+      }
+    },
+  );
+
   // GET /containers/:id/details — logs, inspect, runtime stats and processes
   app.get(
     "/:id/details",
@@ -2100,14 +2378,55 @@ export async function containerRoutes(app: FastifyInstance) {
       try {
         const [logsResult, inspectResult, statsResult, processesResult] =
           await Promise.allSettled([
-            ssh.dockerLogs(
-              container.server,
-              runtimeId,
-              parseInt(lines, 10) || 200,
+            measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.details",
+                category: "logs",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () =>
+                ssh.dockerLogs(
+                  container.server,
+                  runtimeId,
+                  parseInt(lines, 10) || 200,
+                ),
             ),
-            ssh.dockerInspect(container.server, runtimeId),
-            ssh.dockerStats(container.server, runtimeId),
-            ssh.dockerTop(container.server, runtimeId),
+            measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.details",
+                category: "inspect",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () => ssh.dockerInspect(container.server, runtimeId),
+            ),
+            measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.details",
+                category: "stats",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () => ssh.dockerStats(container.server, runtimeId),
+            ),
+            measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.details",
+                category: "top",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () => ssh.dockerTop(container.server, runtimeId),
+            ),
           ]);
         const logs = logsResult.status === "fulfilled" ? logsResult.value : "";
         const inspect =
@@ -2169,7 +2488,17 @@ export async function containerRoutes(app: FastifyInstance) {
       const runtimeId = container.dockerId || container.name;
 
       try {
-        const inspect = await ssh.dockerInspect(container.server, runtimeId);
+        const inspect = await measureDockerCommand(
+          (event) => recordDockerCommandTiming(app, event),
+          {
+            endpoint: "containers.inspect",
+            category: "inspect",
+            serverId: container.serverId,
+            serverName: container.server.name,
+            containerId: container.id,
+          },
+          () => ssh.dockerInspect(container.server, runtimeId),
+        );
         return reply.send({ success: true, data: inspect });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -2177,7 +2506,44 @@ export async function containerRoutes(app: FastifyInstance) {
     },
   );
 
-  // POST /containers — deploy a new container
+  // GET /containers/:id/processes - fetch only the runtime process table.
+  app.get(
+    "/:id/processes",
+    { preHandler: containerReadAccess },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const container = await getAccessibleContainer(id, req.organizationId);
+      if (!container)
+        return reply
+          .status(404)
+          .send({ success: false, error: "Container not found" });
+
+      const runtimeId = container.dockerId || container.name;
+
+      try {
+        const processes = await measureDockerCommand(
+          (event) => recordDockerCommandTiming(app, event),
+          {
+            endpoint: "containers.processes",
+            category: "top",
+            serverId: container.serverId,
+            serverName: container.server.name,
+            containerId: container.id,
+          },
+          () => ssh.dockerTop(container.server, runtimeId),
+        );
+        return reply.send({ success: true, data: processes });
+      } catch (err: unknown) {
+        return reply.status(500).send({
+          success: false,
+          error:
+            err instanceof Error ? err.message : "Failed to load processes",
+        });
+      }
+    },
+  );
+
+  // POST /containers - deploy a new container
   app.post(
     "/",
     { preHandler: containerWriteAccess, bodyLimit: 1024 * 1024 },
@@ -2485,7 +2851,9 @@ export async function containerRoutes(app: FastifyInstance) {
           deploymentPath = result.deploymentPath;
         }
 
-        await syncContainersForServers([server], req.userId);
+        await syncContainersForServers([server], req.userId, (event) =>
+          recordDockerCommandTiming(app, event),
+        );
 
         const serverContainers = await prisma.container.findMany({
           where: { serverId: server.id },
@@ -2650,7 +3018,17 @@ export async function containerRoutes(app: FastifyInstance) {
           // Read actual runtime status after action so DB reflects reality.
           let inspect: any = null;
           try {
-            inspect = await ssh.dockerInspect(container.server, runtimeRefUsed);
+            inspect = await measureDockerCommand(
+              (event) => recordDockerCommandTiming(app, event),
+              {
+                endpoint: "containers.action",
+                category: "inspect",
+                serverId: container.serverId,
+                serverName: container.server.name,
+                containerId: container.id,
+              },
+              () => ssh.dockerInspect(container.server, runtimeRefUsed),
+            );
           } catch {
             inspect = null;
           }
@@ -2678,6 +3056,12 @@ export async function containerRoutes(app: FastifyInstance) {
           category: "CONTAINER",
           level: "INFO",
           message: `Container "${container.name}" → ${action}`,
+        });
+
+        invalidateContainerMetricsCache({
+          organizationId: req.organizationId,
+          serverId: container.serverId,
+          containerId: container.id,
         });
 
         return reply.send({
@@ -2897,7 +3281,9 @@ export async function containerRoutes(app: FastifyInstance) {
           ),
         });
 
-        await syncContainersForServers([container.server], req.userId);
+        await syncContainersForServers([container.server], req.userId, (event) =>
+          recordDockerCommandTiming(app, event),
+        );
 
         const serverContainers = await prisma.container.findMany({
           where: { serverId: container.serverId },
@@ -2990,12 +3376,24 @@ export async function containerRoutes(app: FastifyInstance) {
         return reply
           .status(400)
           .send({ success: false, error: "Container has no Docker ID" });
+      const runtimeId = container.dockerId;
 
       try {
-        const logs = await ssh.dockerLogs(
-          container.server,
-          container.dockerId,
-          parseInt(lines),
+        const logs = await measureDockerCommand(
+          (event) => recordDockerCommandTiming(app, event),
+          {
+            endpoint: "containers.logs",
+            category: "logs",
+            serverId: container.serverId,
+            serverName: container.server.name,
+            containerId: container.id,
+          },
+          () =>
+            ssh.dockerLogs(
+              container.server,
+              runtimeId,
+              parseInt(lines),
+            ),
         );
         return reply.send({
           success: true,

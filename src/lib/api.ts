@@ -1581,6 +1581,18 @@ export interface ContainerDetails {
   processes: ContainerProcess[];
 }
 
+export interface ContainerMetrics {
+  container: {
+    id: string;
+    name: string;
+    status: string;
+    dockerId: string | null;
+    serverId: string;
+  };
+  stats: ContainerRuntimeStats;
+  sampledAt: string;
+}
+
 export interface ContainerFileEntry {
   name: string;
   path: string;
@@ -1855,10 +1867,20 @@ export const containers = {
       `/containers/${id}/inspect`,
       { timeoutMs: 20000 },
     ),
+  processes: (id: string) =>
+    get<{ success: boolean; data: ContainerProcess[] }>(
+      `/containers/${id}/processes`,
+      { timeoutMs: 20000 },
+    ),
   details: (id: string, lines?: number) =>
     get<{ success: boolean; data: ContainerDetails }>(
       `/containers/${id}/details${lines ? `?lines=${lines}` : ""}`,
       { timeoutMs: 30000 },
+    ),
+  metrics: (id: string) =>
+    get<{ success: boolean; data: ContainerMetrics }>(
+      `/containers/${id}/metrics`,
+      { timeoutMs: 15000 },
     ),
   listFiles: (id: string, path?: string) => {
     const qs = new URLSearchParams();
