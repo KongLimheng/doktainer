@@ -2,6 +2,7 @@
 import { randomBytes } from "crypto";
 import { posix as pathPosix } from "path";
 import { Server } from "@prisma/client";
+import { TextDecoder } from "util";
 import { execStrict } from "./commands";
 import { execDocker, execDockerStrict } from "./internal/docker";
 import { privilegedCommand } from "./internal/privilege";
@@ -26,6 +27,7 @@ const CONTAINER_FILE_UPLOAD_CHUNK_SIZE = 48_000;
 const DEPLOY_GIT_CLONE_TIMEOUT_MS = 10 * 60_000;
 const DEPLOY_BUILD_TIMEOUT_MS = 45 * 60_000;
 const DEPLOY_COMPOSE_TIMEOUT_MS = 45 * 60_000;
+const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 
 function shortDockerCommandTimeout(timeoutMs: number) {
   return { timeoutMs, queueTimeoutMs: timeoutMs };
@@ -975,6 +977,23 @@ function guessMimeTypeFromName(filePath: string): string | null {
   return null;
 }
 
+function isUtf8TextBuffer(buffer: Buffer): boolean {
+  for (const byte of buffer) {
+    if (byte === 0) return false;
+    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 12 && byte !== 13) {
+      return false;
+    }
+    if (byte === 127) return false;
+  }
+
+  try {
+    STRICT_UTF8_DECODER.decode(buffer);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function dockerInspect(
   server: Server,
   containerId: string,
@@ -1140,7 +1159,7 @@ export async function readContainerFile(
     'MODIFIED=$(date -r "$TARGET" "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || stat -c "%y" "$TARGET" 2>/dev/null || echo "")',
     'NAME_B64=$(printf "%s" "$NAME" | base64 | tr -d "\\n")',
     'PATH_B64=$(printf "%s" "$TARGET" | base64 | tr -d "\\n")',
-    'TEXT_PROBE=$(head -c 8192 "$TARGET" 2>/dev/null | LC_ALL=C tr -d "\\11\\12\\15\\40-\\176" | wc -c | tr -d " ")',
+    "TEXT_PROBE=$(head -c 8192 \"$TARGET\" 2>/dev/null | od -An -t u1 | awk '{ for (i = 1; i <= NF; i++) if (($i < 32 && $i != 9 && $i != 10 && $i != 13) || $i == 127) bad++ } END { print bad + 0 }')",
     'IS_BINARY="0"',
     'if [ "${TEXT_PROBE:-0}" != "0" ]; then IS_BINARY="1"; fi',
     'TOO_LARGE="0"',
@@ -1148,7 +1167,7 @@ export async function readContainerFile(
     'PREVIEW_ALLOWED="0"',
     `if [ "\${SIZE:-0}" -le ${previewLimit} ] 2>/dev/null; then PREVIEW_ALLOWED="1"; fi`,
     'printf "__META__\t%s\t%s\t%s\t%s\t%s\t%s\n" "$PATH_B64" "$NAME_B64" "$SIZE" "$MODIFIED" "$IS_BINARY" "$TOO_LARGE"',
-    'if [ "$IS_BINARY" = "0" ] && [ "$TOO_LARGE" = "0" ]; then',
+    'if [ "$TOO_LARGE" = "0" ]; then',
     '  printf "__CONTENT__\n"',
     '  base64 "$TARGET"',
     "fi",
@@ -1183,19 +1202,25 @@ export async function readContainerFile(
       : "";
   const previewBase64 =
     previewIndex >= 0 ? lines.slice(previewIndex + 1).join("") : null;
+  const contentBuffer = encodedContent
+    ? Buffer.from(encodedContent, "base64")
+    : null;
+  const isBinary = contentBuffer
+    ? !isUtf8TextBuffer(contentBuffer)
+    : isBinaryRaw === "1";
 
   return {
     path: decodeBase64Value(pathB64 || ""),
     name: decodeBase64Value(nameB64 || ""),
     size: Number.parseInt(sizeRaw || "0", 10) || 0,
     modified: modifiedRaw || null,
-    isBinary: isBinaryRaw === "1",
+    isBinary,
     tooLarge: tooLargeRaw === "1",
     mimeType,
     previewBase64,
     content:
-      contentIndex >= 0 && encodedContent
-        ? Buffer.from(encodedContent, "base64").toString("utf8")
+      contentBuffer && !isBinary
+        ? STRICT_UTF8_DECODER.decode(contentBuffer)
         : "",
   };
 }
