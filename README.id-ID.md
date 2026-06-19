@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./images/previews/banner-doktainer-feature.png" alt="Maskot Doktainer (DOKTA)" width="780"/>
+  <img src="./images/previews/icon-dokta.png" alt="Doktainer Mascot (DOKTA)" width="220"/>
   
 # Doktainer - Kelola Docker, Sederhanakan Semuanya
 
