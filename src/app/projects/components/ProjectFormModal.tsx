@@ -44,23 +44,36 @@ export default function ProjectFormModal({
 
   return (
     <div className="modal-overlay" onClick={submitting ? undefined : onClose}>
-      <form
-        className="modal animate-slide-in"
+      <div
+        className="modal-shell"
+        style={{ maxWidth: 560 }}
         onClick={(event) => event.stopPropagation()}
-        onSubmit={handleSubmit}
-        style={{
-          width: "100%",
-          maxWidth: 560,
-          padding: 28,
-        }}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submitting}
+          className="modal-close"
+          aria-label="Close project modal"
+        >
+          <X size={22} />
+        </button>
+        <form
+          className="modal animate-slide-in"
+          onSubmit={handleSubmit}
+          style={{
+            width: "100%",
+            maxWidth: 560,
+            padding: 28,
+          }}
+        >
         <div
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
             gap: 12,
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -82,21 +95,8 @@ export default function ProjectFormModal({
               {isEditing
                 ? "Update project information used across environments and deployments."
                 : "Create a new project to manage your environments and deployments."}
-            </p>
+              </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
@@ -195,6 +195,7 @@ export default function ProjectFormModal({
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

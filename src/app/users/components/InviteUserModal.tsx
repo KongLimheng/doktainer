@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle, Copy, Key, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, Key, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import type {
   CreateUserInvitationBody,
@@ -58,16 +58,28 @@ export default function InviteUserModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className="modal-shell"
         style={{ maxWidth: 560 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close invite user modal"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal"
+        style={{ maxWidth: 560 }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -86,19 +98,6 @@ export default function InviteUserModal({
               Generate an onboarding link so the user sets their own password.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 18,
-            }}
-          >
-            x
-          </button>
         </div>
 
         {result ? (
@@ -379,6 +378,7 @@ export default function InviteUserModal({
             </div>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

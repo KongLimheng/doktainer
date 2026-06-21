@@ -16,6 +16,7 @@ import {
   ToggleRight,
   Loader2,
   Server as ServerIcon,
+  X,
 } from "lucide-react";
 import {
   security as securityApi,
@@ -1043,16 +1044,28 @@ export default function FirewallPage() {
         {showAddRule && (
           <div className="modal-overlay" onClick={() => setShowAddRule(false)}>
             <div
-              className="modal-content card"
+              className="modal-shell"
+              style={{ maxWidth: 420 }}
               onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setShowAddRule(false)}
+                className="modal-close"
+                aria-label="Close add firewall rule modal"
+              >
+                <X size={22} />
+              </button>
+            <div
+              className="modal-content card"
               style={{ width: "100%", maxWidth: 420, padding: 20 }}
             >
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "space-between",
                   marginBottom: 16,
+                  paddingRight: 36,
                 }}
               >
                 <div>
@@ -1069,12 +1082,6 @@ export default function FirewallPage() {
                     Configure a new UFW rule for this server.
                   </p>
                 </div>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setShowAddRule(false)}
-                >
-                  Close
-                </button>
               </div>
 
               <div
@@ -1154,6 +1161,7 @@ export default function FirewallPage() {
                     Add Rule
                   </button>
                 </div>
+              </div>
               </div>
             </div>
           </div>

@@ -48,6 +48,15 @@ export default function ContainerLogsModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 760 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close logs modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -62,9 +71,9 @@ export default function ContainerLogsModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             padding: "16px 20px",
+            paddingRight: 52,
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -80,18 +89,6 @@ export default function ContainerLogsModal({
               Logs - {container.name}
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
         <div
           ref={viewportRef}
@@ -113,6 +110,7 @@ export default function ContainerLogsModal({
           ) : (
             logs
           )}
+        </div>
         </div>
       </div>
     </div>

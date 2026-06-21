@@ -1,4 +1,4 @@
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import type { RuleFormState } from "./security-types";
 
 interface AddFirewallRuleModalProps {
@@ -19,16 +19,28 @@ export default function AddFirewallRuleModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className="modal-shell"
         style={{ maxWidth: 400 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close add firewall rule modal"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal"
+        style={{ maxWidth: 400 }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <h3
@@ -40,19 +52,6 @@ export default function AddFirewallRuleModal({
           >
             Add Firewall Rule
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 18,
-            }}
-          >
-            x
-          </button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
@@ -173,6 +172,7 @@ export default function AddFirewallRuleModal({
               Add Rule
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

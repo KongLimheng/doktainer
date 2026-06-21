@@ -772,16 +772,28 @@ function TerminalPageContent() {
           style={{ zIndex: 200 }}
         >
           <div
+            className="modal-shell"
+            style={{ maxWidth: 480 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowPicker(false)}
+              className="modal-close"
+              aria-label="Close terminal session picker"
+            >
+              <X size={22} />
+            </button>
+          <div
             className="modal"
             style={{ maxWidth: 480, width: "100%" }}
-            onClick={(event) => event.stopPropagation()}
           >
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: 16,
+                paddingRight: 36,
               }}
             >
               <div>
@@ -804,17 +816,6 @@ function TerminalPageContent() {
                   Choose a server to open or restore an SSH session.
                 </p>
               </div>
-              <button
-                onClick={() => setShowPicker(false)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                }}
-              >
-                <X size={18} />
-              </button>
             </div>
 
             {pickerError && (
@@ -926,6 +927,7 @@ function TerminalPageContent() {
                 ))
               )}
             </div>
+          </div>
           </div>
         </div>
       )}

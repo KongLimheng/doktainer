@@ -259,6 +259,15 @@ function CreateBackupModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 440 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close create backup modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{ width: "100%", maxWidth: 440, padding: 28 }}
@@ -266,9 +275,9 @@ function CreateBackupModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -287,17 +296,6 @@ function CreateBackupModal({
               Backup a server&apos;s data to local or S3
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {error && (
@@ -626,6 +624,7 @@ function CreateBackupModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
@@ -919,6 +918,15 @@ export default function BackupsPage() {
       />
       {downloadDialog && (
         <div className="modal-overlay">
+          <div className="modal-shell" style={{ maxWidth: 720 }}>
+            <button
+              type="button"
+              onClick={() => setDownloadDialog(null)}
+              className="modal-close"
+              aria-label="Close download backup modal"
+            >
+              <X size={22} />
+            </button>
           <div
             className="modal animate-slide-in"
             style={{ width: "100%", maxWidth: 720, padding: 24 }}
@@ -926,10 +934,10 @@ export default function BackupsPage() {
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: 18,
                 gap: 12,
+                paddingRight: 36,
               }}
             >
               <div>
@@ -952,17 +960,6 @@ export default function BackupsPage() {
                   Pilih format download untuk {downloadDialog.name}
                 </p>
               </div>
-              <button
-                onClick={() => setDownloadDialog(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <X size={18} />
-              </button>
             </div>
             <div
               style={{
@@ -1042,6 +1039,7 @@ export default function BackupsPage() {
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>
         </div>

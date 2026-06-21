@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Edit3, Loader2 } from "lucide-react";
+import { AlertCircle, Edit3, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import type { UserRecord, UserRole } from "@/lib/api";
 import { manageableRoles } from "@/app/users/components/user-role-config";
@@ -27,16 +27,28 @@ export default function EditRoleModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className="modal-shell"
         style={{ maxWidth: 420 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close edit role modal"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal"
+        style={{ maxWidth: 420 }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -53,19 +65,6 @@ export default function EditRoleModal({
               {user.email}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 18,
-            }}
-          >
-            x
-          </button>
         </div>
 
         {error ? (
@@ -151,6 +150,7 @@ export default function EditRoleModal({
             )}
             Save Role
           </button>
+        </div>
         </div>
       </div>
     </div>

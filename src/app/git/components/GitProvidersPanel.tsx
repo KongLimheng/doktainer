@@ -492,8 +492,21 @@ export default function GitProvidersPanel({
   const renderProviderSelectorModal = () => (
     <div className="modal-overlay" onClick={closeProviderSelector}>
       <div
-        className="modal animate-slide-in"
+        className="modal-shell"
+        style={{ maxWidth: 640 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={closeProviderSelector}
+          className="modal-close"
+          aria-label="Close modal"
+          title="Close"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal animate-slide-in"
         style={{
           width: "100%",
           maxWidth: 640,
@@ -504,10 +517,10 @@ export default function GitProvidersPanel({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "flex-start",
             marginBottom: 20,
             gap: 12,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -531,30 +544,10 @@ export default function GitProvidersPanel({
               and repository access.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={closeProviderSelector}
-            aria-label="Close modal"
-            title="Close"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              marginTop: -8,
-              marginRight: -8,
-              width: 28,
-              height: 28,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {renderProviderSelectionRow()}
+        </div>
       </div>
     </div>
   );
@@ -1221,8 +1214,27 @@ export default function GitProvidersPanel({
       {draft ? (
         <div className="modal-overlay" onClick={closeModal}>
           <div
-            className="modal animate-slide-in"
+            className="modal-shell"
+            style={{
+              width:
+                draft.provider === "github"
+                  ? "min(640px, calc(100% - 48px))"
+                  : "min(720px, calc(100% - 48px))",
+              maxWidth: 720,
+            }}
             onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={closeModal}
+              className="modal-close"
+              aria-label="Close modal"
+              title="Close"
+            >
+              <X size={22} />
+            </button>
+          <div
+            className="modal animate-slide-in"
             style={{
               width:
                 draft.provider === "github"
@@ -1237,10 +1249,10 @@ export default function GitProvidersPanel({
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 gap: 12,
                 alignItems: "flex-start",
                 marginBottom: 22,
+                paddingRight: 36,
               }}
             >
               <div>
@@ -1265,24 +1277,6 @@ export default function GitProvidersPanel({
                   flow.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                aria-label="Close modal"
-                title="Close"
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                  padding: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <X size={18} />
-              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1341,6 +1335,7 @@ export default function GitProvidersPanel({
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       ) : null}

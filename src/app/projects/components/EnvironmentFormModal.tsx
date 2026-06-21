@@ -61,9 +61,22 @@ export default function EnvironmentFormModal({
 
   return (
     <div className="modal-overlay" onClick={submitting ? undefined : onClose}>
+      <div
+        className="modal-shell"
+        style={{ maxWidth: 560 }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submitting}
+          className="modal-close"
+          aria-label="Close environment modal"
+        >
+          <X size={22} />
+        </button>
       <form
         className="modal animate-slide-in"
-        onClick={(event) => event.stopPropagation()}
         onSubmit={handleSubmit}
         style={{
           width: "100%",
@@ -75,9 +88,9 @@ export default function EnvironmentFormModal({
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
             gap: 12,
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -96,19 +109,6 @@ export default function EnvironmentFormModal({
               Tambahkan environment baru ke project {projectName}.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <div style={{ display: "grid", gap: 14 }}>
@@ -250,6 +250,7 @@ export default function EnvironmentFormModal({
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

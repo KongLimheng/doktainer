@@ -483,7 +483,16 @@ function InstallOperationsModal({
         padding: 16,
       }}
     >
-      <div
+      <div className="modal-shell" style={{ maxWidth: 1100 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close installed app details modal"
+        >
+          <X size={22} />
+        </button>
+        <div
         className="modal animate-slide-in"
         style={{
           width: "100%",
@@ -498,10 +507,10 @@ function InstallOperationsModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "flex-start",
             gap: 16,
             padding: "18px 22px",
+            paddingRight: 56,
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -526,19 +535,6 @@ function InstallOperationsModal({
                 : install.serverId}
               {install.containerName ? ` • ${install.containerName}` : ""}
             </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-              }}
-            >
-              <X size={18} />
-            </button>
           </div>
         </div>
 
@@ -1213,6 +1209,7 @@ function InstallOperationsModal({
               ) : null}
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

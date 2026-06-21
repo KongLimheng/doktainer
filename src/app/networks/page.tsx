@@ -111,6 +111,15 @@ function AddNetworkModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 520 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close create network modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{ width: "100%", maxWidth: 520, padding: 24 }}
@@ -118,9 +127,9 @@ function AddNetworkModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 18,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -140,17 +149,6 @@ function AddNetworkModal({
               database.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {error && (
@@ -356,6 +354,7 @@ function AddNetworkModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
@@ -439,7 +438,16 @@ function NetworkDetailsModal({
         padding: 16,
       }}
     >
-      <div
+      <div className="modal-shell" style={{ maxWidth: 1040 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close network detail modal"
+        >
+          <X size={22} />
+        </button>
+        <div
         className="modal animate-slide-in"
         style={{
           width: "100%",
@@ -454,9 +462,9 @@ function NetworkDetailsModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             padding: "18px 22px",
+            paddingRight: 56,
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -495,17 +503,6 @@ function NetworkDetailsModal({
                   : "Unknown server"}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <div
@@ -975,6 +972,7 @@ function NetworkDetailsModal({
               )}
             </>
           ) : null}
+        </div>
         </div>
       </div>
     </div>

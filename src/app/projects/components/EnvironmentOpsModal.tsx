@@ -79,9 +79,22 @@ export default function EnvironmentOpsModal({
 
   return (
     <div className="modal-overlay" onClick={submitting ? undefined : onClose}>
+      <div
+        className="modal-shell"
+        style={{ maxWidth: 760 }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submitting}
+          className="modal-close"
+          aria-label="Close environment detail modal"
+        >
+          <X size={22} />
+        </button>
       <form
         className="modal animate-slide-in"
-        onClick={(event) => event.stopPropagation()}
         onSubmit={handleSubmit}
         style={{ width: "100%", maxWidth: 760, padding: 28 }}
       >
@@ -89,9 +102,9 @@ export default function EnvironmentOpsModal({
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
             gap: 12,
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -110,19 +123,6 @@ export default function EnvironmentOpsModal({
               Informasi dan edit metadata environment.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <section
@@ -331,6 +331,7 @@ export default function EnvironmentOpsModal({
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

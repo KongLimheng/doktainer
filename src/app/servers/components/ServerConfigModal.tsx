@@ -628,6 +628,15 @@ export default function ServerConfigModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 920 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close server config modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -946,24 +955,13 @@ export default function ServerConfigModal({
               Refresh.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, paddingRight: 36 }}>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => void loadSnapshot()}
               disabled={loading}
             >
               <RefreshCw size={14} /> Refresh
-            </button>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-              }}
-            >
-              <X size={18} />
             </button>
           </div>
         </div>
@@ -1156,6 +1154,7 @@ export default function ServerConfigModal({
         ) : (
           renderActiveTab()
         )}
+        </div>
       </div>
     </div>
   );

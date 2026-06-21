@@ -40,6 +40,15 @@ export default function IssueCertificateModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 500 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close issue certificate modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{ width: "100%", maxWidth: 500, padding: 24 }}
@@ -47,9 +56,9 @@ export default function IssueCertificateModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 18,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -68,18 +77,6 @@ export default function IssueCertificateModal({
               Create a new SSL record from an existing domain.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {error ? (
@@ -188,6 +185,7 @@ export default function IssueCertificateModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

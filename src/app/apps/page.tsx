@@ -1003,59 +1003,59 @@ function InstallModal({
   return createPortal(
     <div className="modal-overlay">
       <div
-        className="modal animate-slide-in"
-        style={{
-          width: "min(1100px, 100%)",
-          maxWidth: 1100,
-          maxHeight: "calc(100vh - 40px)",
-          overflow: "auto",
-          padding: 24,
-        }}
+        className="modal-shell"
+        style={{ width: "min(1100px, calc(100% - 48px))", maxWidth: 1100 }}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close install modal"
+        >
+          <X size={22} />
+        </button>
         <div
+          className="modal animate-slide-in"
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 16,
-            alignItems: "flex-start",
-            marginBottom: 20,
+            width: "100%",
+            maxWidth: 1100,
+            maxHeight: "calc(100vh - 64px)",
+            overflow: "auto",
+            padding: 24,
           }}
         >
-          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <AppIconBadge template={template} size={54} />
-            <div>
-              <h3
-                style={{
-                  color: "var(--text-primary)",
-                  fontWeight: 700,
-                  fontSize: 18,
-                  marginBottom: 4,
-                }}
-              >
-                {mode === "custom"
-                  ? "Custom App Install"
-                  : `Install ${template?.name ?? "App"}`}
-              </h3>
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {mode === "custom"
-                  ? "Define your own Docker image, ports, env vars, volumes, and runtime options."
-                  : "Start from the template, then override ports, env vars, paths, or command as needed."}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
+          <div
             style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
+              display: "flex",
+              gap: 16,
+              alignItems: "flex-start",
+              marginBottom: 20,
+              paddingRight: 28,
             }}
           >
-            <X size={18} />
-          </button>
-        </div>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              <AppIconBadge template={template} size={54} />
+              <div>
+                <h3
+                  style={{
+                    color: "var(--text-primary)",
+                    fontWeight: 700,
+                    fontSize: 18,
+                    marginBottom: 4,
+                  }}
+                >
+                  {mode === "custom"
+                    ? "Custom App Install"
+                    : `Install ${template?.name ?? "App"}`}
+                </h3>
+                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  {mode === "custom"
+                    ? "Define your own Docker image, ports, env vars, volumes, and runtime options."
+                    : "Start from the template, then override ports, env vars, paths, or command as needed."}
+                </p>
+              </div>
+            </div>
+          </div>
 
         <div
           style={{
@@ -1675,6 +1675,7 @@ function InstallModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>,
     document.body,

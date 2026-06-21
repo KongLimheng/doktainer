@@ -467,16 +467,25 @@ export default function AddDatabaseModal({
 
   return (
     <div className="modal-overlay">
-      <div
-        className="modal animate-slide-in"
-        style={{ width: "100%", maxWidth: 540, padding: 28 }}
-      >
+      <div className="modal-shell" style={{ maxWidth: 540 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close deploy database modal"
+        >
+          <X size={22} />
+        </button>
+        <div
+          className="modal animate-slide-in"
+          style={{ width: "100%", maxWidth: 540, padding: 28 }}
+        >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -511,20 +520,9 @@ export default function AddDatabaseModal({
             >
               {choice === null
                 ? "Select a source to deploy from"
-                : "Deploy a new database container on your server"}
+              : "Deploy a new database container on your server"}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {error && (
@@ -1052,6 +1050,7 @@ export default function AddDatabaseModal({
             </div>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

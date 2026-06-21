@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Loader2, Shield } from "lucide-react";
+import { AlertCircle, Loader2, Shield, X } from "lucide-react";
 import { useState } from "react";
 import type { Server as ServerRecord, UserRecord } from "@/lib/api";
 import ServerAccessSelector from "@/app/users/components/ServerAccessSelector";
@@ -35,16 +35,28 @@ export default function ServerAccessModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className="modal-shell"
         style={{ maxWidth: 600 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close server access modal"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal"
+        style={{ maxWidth: 600 }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -61,19 +73,6 @@ export default function ServerAccessModal({
               {user.email}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 18,
-            }}
-          >
-            x
-          </button>
         </div>
 
         {error ? (
@@ -139,6 +138,7 @@ export default function ServerAccessModal({
             )}
             Save Access
           </button>
+        </div>
         </div>
       </div>
     </div>

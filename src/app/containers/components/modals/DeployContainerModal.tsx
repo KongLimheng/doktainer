@@ -989,9 +989,7 @@ export default function DeployContainerModal({
               },
             });
 
-            void containersApi
-              .cancelJob(jobId)
-              .catch(() => undefined);
+            void containersApi.cancelJob(jobId).catch(() => undefined);
           },
         },
       });
@@ -1079,6 +1077,15 @@ export default function DeployContainerModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 640 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close deploy container modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -1091,10 +1098,10 @@ export default function DeployContainerModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
             gap: 12,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -1140,27 +1147,6 @@ export default function DeployContainerModal({
                 : "Select a source to deploy from. You can choose from pre-built app templates, connect your Git provider, or manually enter deployment details."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              marginTop: -35,
-              marginRight: -20,
-              // backgroundColor: "#acacac",
-              // borderRadius: "50%",
-              width: 28,
-              height: 28,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
         {error ? (
           <div
@@ -2097,6 +2083,7 @@ export default function DeployContainerModal({
             </div>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

@@ -58,6 +58,15 @@ export default function ContainerDetailsModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 1080 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close container details modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -73,9 +82,9 @@ export default function ContainerDetailsModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             padding: "18px 22px",
+            paddingRight: 56,
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -103,18 +112,6 @@ export default function ContainerDetailsModal({
                 : ""}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
         <div
           style={{
@@ -586,6 +583,7 @@ export default function ContainerDetailsModal({
               ) : null}
             </>
           ) : null}
+        </div>
         </div>
       </div>
     </div>

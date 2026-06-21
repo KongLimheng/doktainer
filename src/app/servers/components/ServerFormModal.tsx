@@ -92,20 +92,29 @@ export default function ServerFormModal({
 
   return (
     <div className="modal-overlay">
-      <div
-        className="modal animate-slide-in"
-        style={{
-          width: "100%",
-          maxWidth: 520,
-          padding: 28,
-        }}
-      >
+      <div className="modal-shell" style={{ maxWidth: 520 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label={isEdit ? "Close edit server modal" : "Close add server modal"}
+        >
+          <X size={22} />
+        </button>
+        <div
+          className="modal animate-slide-in"
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            padding: 28,
+          }}
+        >
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <h3
@@ -117,18 +126,6 @@ export default function ServerFormModal({
           >
             {isEdit ? "Edit Server" : "Add Server"}
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
         {error && (
           <div
@@ -428,6 +425,7 @@ export default function ServerFormModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

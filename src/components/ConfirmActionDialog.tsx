@@ -73,21 +73,35 @@ export default function ConfirmActionDialog({
       onClick={onClose}
     >
       <div
-        className="card"
+        className="modal-shell"
         style={{
           width: "min(100%, 520px)",
-          padding: 0,
-          overflow: "hidden",
-          boxShadow: "0 28px 70px rgba(2, 6, 23, 0.46)",
+          maxWidth: 520,
         }}
         onClick={(event) => event.stopPropagation()}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close confirmation dialog"
+        >
+          <X size={22} />
+        </button>
+        <div
+          className="card"
+          style={{
+            padding: 0,
+            overflow: "hidden",
+            boxShadow: "0 28px 70px rgba(2, 6, 23, 0.46)",
+          }}
+        >
         <div style={{ padding: 28, display: "grid", gap: 18 }}>
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
               gap: 12,
+              paddingRight: 28,
             }}
           >
             <div style={{ display: "grid", gap: 8 }}>
@@ -121,19 +135,6 @@ export default function ConfirmActionDialog({
                 {description}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                alignSelf: "flex-start",
-              }}
-              aria-label="Close confirmation dialog"
-            >
-              <X size={18} />
-            </button>
           </div>
 
           {note ? (
@@ -175,6 +176,7 @@ export default function ConfirmActionDialog({
               {confirmLabel}
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

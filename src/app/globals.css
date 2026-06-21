@@ -822,6 +822,7 @@ body {
   contain: layout paint style;
 }
 .modal {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -836,6 +837,73 @@ body {
   scrollbar-color: var(--scrollbar-thumb) transparent;
   /* box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45); */
   contain: content;
+}
+
+.modal-shell {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  --modal-close-size: 28px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 5;
+  display: inline-flex;
+  width: var(--modal-close-size);
+  height: var(--modal-close-size);
+  min-width: var(--modal-close-size);
+  flex: 0 0 var(--modal-close-size);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: 2px solid rgba(255, 255, 255, 0.82) !important;
+  border-radius: 50%;
+  background: #2c2c2c !important;
+  color: #ffffff !important;
+  /* box-shadow:
+    0 14px 30px rgba(220, 38, 38, 0.34),
+    0 4px 14px rgba(2, 6, 23, 0.26); */
+  cursor: pointer;
+  line-height: 1;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+  transform: translate(50%, -50%);
+  transition: all 0.4s ease;
+}
+
+.modal-close:hover {
+  background: #b91c1c !important;
+  /* box-shadow:
+    0 16px 36px rgba(220, 38, 38, 0.42),
+    0 6px 18px rgba(2, 6, 23, 0.28); */
+  transform: translate(50%, calc(-50% - 1px)) rotate(180deg);
+}
+
+.modal-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: translate(50%, -50%);
+}
+
+.modal-close:focus-visible {
+  outline: 3px solid rgba(239, 68, 68, 0.3);
+  outline-offset: 3px;
+}
+
+.modal-close svg {
+  stroke-width: 2.25;
+}
+
+@media (max-width: 640px) {
+  .modal-close {
+    --modal-close-size: 28px;
+  }
 }
 
 .modal::-webkit-scrollbar {

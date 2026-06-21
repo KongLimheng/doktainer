@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Shield,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -856,6 +857,19 @@ export default function ApiKeysPage() {
       {showCreate && (
         <div className="modal-overlay" onClick={closeCreateModal}>
           <div
+            className="modal-shell"
+            style={{ maxWidth: 520 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={closeCreateModal}
+              className="modal-close"
+              aria-label="Close API key modal"
+            >
+              <X size={22} />
+            </button>
+          <div
             className="modal"
             style={{
               maxWidth: 520,
@@ -863,14 +877,13 @@ export default function ApiKeysPage() {
               overflowY: "auto",
               padding: "clamp(18px, 3vw, 24px)",
             }}
-            onClick={(event) => event.stopPropagation()}
           >
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: 20,
+                paddingRight: 36,
               }}
             >
               <div>
@@ -895,18 +908,6 @@ export default function ApiKeysPage() {
                     : "Create a new API key for scripts, bots, and CI/CD jobs."}
                 </p>
               </div>
-              <button
-                onClick={closeCreateModal}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 18,
-                }}
-              >
-                ×
-              </button>
             </div>
 
             {generatedKey ? (
@@ -1195,6 +1196,7 @@ export default function ApiKeysPage() {
                 </div>
               </form>
             )}
+            </div>
           </div>
         </div>
       )}

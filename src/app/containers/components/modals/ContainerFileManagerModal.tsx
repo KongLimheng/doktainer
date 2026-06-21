@@ -491,6 +491,18 @@ export default function ContainerFileManagerModal({
           current?.onConfirm();
         }}
       />
+      <div className="modal-shell" style={{ maxWidth: 1240 }}>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!(await confirmLoseChanges())) return;
+            onClose();
+          }}
+          className="modal-close"
+          aria-label="Close file manager modal"
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -507,8 +519,8 @@ export default function ContainerFileManagerModal({
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
             padding: "18px 22px",
+            paddingRight: 56,
             borderBottom: "1px solid var(--border)",
             gap: 16,
           }}
@@ -535,21 +547,6 @@ export default function ContainerFileManagerModal({
                 : ""}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!(await confirmLoseChanges())) return;
-              onClose();
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <div
@@ -1494,6 +1491,7 @@ export default function ContainerFileManagerModal({
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

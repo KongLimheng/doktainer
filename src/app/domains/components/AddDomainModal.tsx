@@ -478,6 +478,15 @@ export default function AddDomainModal({
 
   return (
     <div className="modal-overlay">
+      <div className="modal-shell" style={{ maxWidth: 580 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label={isEditMode ? "Close edit domain modal" : "Close add domain modal"}
+        >
+          <X size={22} />
+        </button>
       <div
         className="modal animate-slide-in"
         style={{
@@ -489,9 +498,9 @@ export default function AddDomainModal({
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: 20,
+            paddingRight: 36,
           }}
         >
           <div>
@@ -512,17 +521,6 @@ export default function AddDomainModal({
                 : "Configure domain with optional auto-SSL"}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {error && (
@@ -744,7 +742,7 @@ export default function AddDomainModal({
                   }}
                 >
                   Isolated config means the Nginx config for this domain will be
-                  created separately and won't be shared with any other domain.
+                  created separately and won&apos;t be shared with any other domain.
                   This allows you to reuse target containers and ports that are
                   already in use by other domains, as long as those domains are
                   not using Shared mode on the same server.
@@ -803,6 +801,7 @@ export default function AddDomainModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

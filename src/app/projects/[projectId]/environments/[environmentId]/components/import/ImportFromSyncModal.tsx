@@ -126,7 +126,11 @@ export default function ImportFromSyncModal({
       );
       setServerContainers((current) =>
         current.map((item) =>
-          item.id === container.id ? { ...item, environmentId } : item,
+          item.id === container.id
+            ? { ...item, environmentId }
+            : item.environmentId === environmentId
+              ? item
+              : item,
         ),
       );
     } catch (assignError) {
@@ -143,17 +147,29 @@ export default function ImportFromSyncModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal animate-slide-in"
+        className="modal-shell"
+        style={{ maxWidth: 760 }}
         onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label="Close import from sync modal"
+        >
+          <X size={22} />
+        </button>
+      <div
+        className="modal animate-slide-in"
         style={{ width: "100%", maxWidth: 760, padding: 24 }}
       >
         <div
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
             gap: 12,
             marginBottom: 16,
+            paddingRight: 36,
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -178,18 +194,6 @@ export default function ImportFromSyncModal({
               {environmentName}.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <section
@@ -252,7 +256,9 @@ export default function ImportFromSyncModal({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <CloudSyncIcon size={14} style={{ color: "var(--text-muted)" }} />
-            <strong style={{ fontSize: 13 }}>Services / Containers</strong>
+            <strong style={{ fontSize: 13 }}>
+              Services / Containers
+            </strong>
           </div>
           <button
             type="button"
@@ -402,7 +408,9 @@ export default function ImportFromSyncModal({
                         className="btn btn-ghost"
                         onClick={() => void handleAssign(container)}
                         disabled={
-                          assigningContainerId !== null || syncing || loading
+                          assigningContainerId !== null ||
+                          syncing ||
+                          loading
                         }
                         style={{
                           color: assignedElsewhere ? "#f59e0b" : "#93c5fd",
@@ -457,6 +465,7 @@ export default function ImportFromSyncModal({
             {error}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

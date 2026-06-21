@@ -597,6 +597,19 @@ export default function NotificationsSettingsPanel({
       {draft ? (
         <div className="modal-overlay">
           <div
+            className="modal-shell"
+            style={{ width: "min(780px, calc(100% - 48px))", maxWidth: 780 }}
+          >
+            <button
+              type="button"
+              onClick={closeModal}
+              className="modal-close"
+              aria-label="Close modal"
+              title="Close"
+            >
+              <X size={22} />
+            </button>
+          <div
             className="modal animate-slide-in"
             style={{
               width: "min(780px, 100%)",
@@ -609,10 +622,10 @@ export default function NotificationsSettingsPanel({
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 gap: 12,
                 alignItems: "flex-start",
                 marginBottom: 22,
+                paddingRight: 36,
               }}
             >
               <div>
@@ -637,24 +650,6 @@ export default function NotificationsSettingsPanel({
                     : "Set up a new notification provider and configure which events will trigger notifications."}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                aria-label="Close modal"
-                title="Close"
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                  padding: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <X size={18} />
-              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1423,6 +1418,7 @@ export default function NotificationsSettingsPanel({
                   )}
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>
