@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
+  ChevronDown,
   ChevronRight,
   Download,
   FilePlus2,
@@ -74,6 +75,7 @@ export default function ContainerFileManagerModal({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [busyPath, setBusyPath] = useState<string | null>(null);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"file" | "folder" | null>(null);
   const [createName, setCreateName] = useState("");
   const [renamePath, setRenamePath] = useState<string | null>(null);
@@ -404,6 +406,7 @@ export default function ContainerFileManagerModal({
   };
 
   const handleUploadRequest = () => {
+    setNewMenuOpen(false);
     fileInputRef.current?.click();
   };
 
@@ -442,6 +445,31 @@ export default function ContainerFileManagerModal({
       : null;
 
   const pathSegments = currentPath.split("/").filter(Boolean);
+  const breadcrumbItems =
+    pathSegments.length > 5
+      ? [
+          ...pathSegments.slice(0, 2).map((segment, index) => ({
+            segment,
+            index,
+            type: "segment" as const,
+          })),
+          {
+            segment: "...",
+            index: -1,
+            type: "ellipsis" as const,
+            title: pathSegments.slice(2, -2).join("/"),
+          },
+          ...pathSegments.slice(-2).map((segment, offset) => ({
+            segment,
+            index: pathSegments.length - 2 + offset,
+            type: "segment" as const,
+          })),
+        ]
+      : pathSegments.map((segment, index) => ({
+          segment,
+          index,
+          type: "segment" as const,
+        }));
 
   return (
     <div className="modal-overlay">
@@ -589,30 +617,55 @@ export default function ContainerFileManagerModal({
               >
                 /
               </button>
-              {pathSegments.map((segment, index) => {
-                const targetPath = `/${pathSegments.slice(0, index + 1).join("/")}`;
+              {breadcrumbItems.map((item) => {
                 return (
                   <div
-                    key={targetPath}
+                    key={
+                      item.type === "segment"
+                        ? `path-${item.index}`
+                        : "path-ellipsis"
+                    }
                     style={{ display: "flex", alignItems: "center", gap: 6 }}
                   >
                     <ChevronRight
                       size={12}
                       style={{ color: "var(--text-muted)" }}
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleNavigate(targetPath)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-secondary)",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      {segment}
-                    </button>
+                    {item.type === "ellipsis" ? (
+                      <span
+                        title={item.title}
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: 12,
+                          cursor: item.title ? "help" : "default",
+                        }}
+                      >
+                        {item.segment}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleNavigate(
+                            `/${pathSegments
+                              .slice(0, item.index + 1)
+                              .join("/")}`,
+                          )
+                        }
+                        title={`/${pathSegments
+                          .slice(0, item.index + 1)
+                          .join("/")}`}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--text-secondary)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        {item.segment}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -620,45 +673,126 @@ export default function ContainerFileManagerModal({
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={() => {
-                setCreateMode("file");
-                setCreateName("new-file.txt");
-                setRenamePath(null);
+            <div
+              style={{ position: "relative" }}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setNewMenuOpen(false);
+                }
               }}
-              disabled={listingLoading}
             >
-              <FilePlus2 size={12} />
-              New File
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={() => {
-                setCreateMode("folder");
-                setCreateName("new-folder");
-                setRenamePath(null);
-              }}
-              disabled={listingLoading}
-            >
-              <FolderPlus size={12} />
-              New Folder
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={handleUploadRequest}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Upload size={12} />
-              )}
-              Upload
-            </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12 }}
+                onClick={() => setNewMenuOpen((open) => !open)}
+                disabled={listingLoading || uploading}
+                aria-expanded={newMenuOpen}
+                aria-haspopup="menu"
+              >
+                {uploading ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <FilePlus2 size={12} />
+                )}
+                New
+                <ChevronDown size={12} />
+              </button>
+              {newMenuOpen ? (
+                <div
+                  role="menu"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    left: 0,
+                    zIndex: 20,
+                    minWidth: 160,
+                    padding: 6,
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    boxShadow: "var(--shadow-lg)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setNewMenuOpen(false);
+                      setCreateMode("file");
+                      setCreateName("new-file.txt");
+                      setRenamePath(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 10px",
+                      background: "none",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    <FilePlus2 size={12} />
+                    New File
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setNewMenuOpen(false);
+                      setCreateMode("folder");
+                      setCreateName("new-folder");
+                      setRenamePath(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 10px",
+                      background: "none",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    <FolderPlus size={12} />
+                    New Folder
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleUploadRequest}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 10px",
+                      background: "none",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    <Upload size={12} />
+                    Upload
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               className="btn btn-ghost"
               style={{ fontSize: 12 }}
