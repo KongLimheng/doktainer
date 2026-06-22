@@ -1,6 +1,10 @@
 "use client";
 
-import { HEALTH_URL } from "@/lib/api";
+import {
+  HEALTH_URL,
+  topbarNotificationsApi,
+  type CommitHistoryNotificationRecord,
+} from "@/lib/api";
 import { useCurrentUser } from "@/lib/auth-state";
 import { navigation } from "@/lib/navigation";
 import {
@@ -26,19 +30,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ConnectionState = "checking" | "online" | "offline" | "degraded";
 
-type NotificationTone = "info" | "success" | "warning" | "error";
-
-interface TopbarNotification {
-  id: string;
-  title: string;
-  message: string;
-  tone: NotificationTone;
-  timestamp: number;
-  read: boolean;
-}
-
-const TOPBAR_NOTIFICATIONS_KEY = "portainer-topbar-notifications";
+const TOPBAR_COMMIT_READ_KEY = "doktainer-topbar-read-commit-notifications";
 const MAX_TOPBAR_NOTIFICATIONS = 5;
+
+function readStoredCommitNotificationIds() {
+  if (typeof window === "undefined") {
+    return new Set<string>();
+  }
+
+  try {
+    const stored = window.localStorage.getItem(TOPBAR_COMMIT_READ_KEY);
+    if (!stored) {
+      return new Set<string>();
+    }
+
+    const parsed = JSON.parse(stored) as string[];
+    return new Set(parsed.filter(Boolean));
+  } catch {
+    window.localStorage.removeItem(TOPBAR_COMMIT_READ_KEY);
+    return new Set<string>();
+  }
+}
 
 interface TopbarProps {
   title: string;
@@ -55,141 +67,70 @@ export default function Topbar({
   const pathname = usePathname();
   const router = useRouter();
   const [time, setTime] = useState("");
+  const [notificationNow, setNotificationNow] = useState(0);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("checking");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("dark");
-  const [notifications, setNotifications] = useState<TopbarNotification[]>([]);
+  const [notifications, setNotifications] = useState<
+    CommitHistoryNotificationRecord[]
+  >([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsError, setNotificationsError] = useState<string | null>(
+    null,
+  );
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(
+    readStoredCommitNotificationIds,
+  );
   const [notificationOpen, setNotificationOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const searchShellRef = useRef<HTMLDivElement | null>(null);
   const notificationShellRef = useRef<HTMLDivElement | null>(null);
-  const notificationsRef = useRef<TopbarNotification[]>([]);
-  const lastConnectionNotificationRef = useRef<ConnectionState | null>(null);
-
-  const updateNotifications = useCallback(
-    (updater: (current: TopbarNotification[]) => TopbarNotification[]) => {
-      setNotifications((current) => {
-        const next = updater(current).slice(0, MAX_TOPBAR_NOTIFICATIONS);
-        notificationsRef.current = next;
-        window.localStorage.setItem(
-          TOPBAR_NOTIFICATIONS_KEY,
-          JSON.stringify(next),
-        );
-        return next;
-      });
-    },
-    [],
-  );
-
-  const pushNotification = useCallback(
-    ({
-      title: nextTitle,
-      message,
-      tone = "info",
-    }: Omit<TopbarNotification, "id" | "timestamp" | "read">) => {
-      updateNotifications((current) => [
-        {
-          id: `topbar-notification-${Date.now()}-${current.length}`,
-          title: nextTitle,
-          message,
-          tone,
-          timestamp: Date.now(),
-          read: false,
-        },
-        ...current,
-      ]);
-    },
-    [updateNotifications],
-  );
 
   const markNotificationsRead = useCallback(() => {
-    updateNotifications((current) => {
-      if (current.every((notification) => notification.read)) {
-        return current;
-      }
-
-      return current.map((notification) => ({
-        ...notification,
-        read: true,
-      }));
+    setReadNotificationIds((current) => {
+      const next = new Set(current);
+      notifications.forEach((notification) => next.add(notification.id));
+      window.localStorage.setItem(
+        TOPBAR_COMMIT_READ_KEY,
+        JSON.stringify([...next].slice(0, 100)),
+      );
+      return next;
     });
-  }, [updateNotifications]);
+  }, [notifications]);
+
+  const loadNotifications = useCallback(async () => {
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+
+    try {
+      const response = await topbarNotificationsApi.listCommits();
+      setNotifications(response.data.slice(0, MAX_TOPBAR_NOTIFICATIONS));
+    } catch (error) {
+      setNotifications([]);
+      setNotificationsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load commit history",
+      );
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(TOPBAR_NOTIFICATIONS_KEY);
+    const timeout = window.setTimeout(() => {
+      void loadNotifications();
+    }, 0);
 
-      if (stored) {
-        const parsed = JSON.parse(stored) as TopbarNotification[];
-        const initial = parsed.slice(0, MAX_TOPBAR_NOTIFICATIONS);
-        setNotifications(initial);
-        notificationsRef.current = initial;
-        return;
-      }
-    } catch {
-      window.localStorage.removeItem(TOPBAR_NOTIFICATIONS_KEY);
-    }
-
-    const now = Date.now();
-    const seeded: TopbarNotification[] = [
-      {
-        id: "seed-1",
-        title: "Welcome back",
-        message: currentUser?.name
-          ? `${currentUser.name}, your workspace is ready.`
-          : "Your workspace is ready.",
-        tone: "info",
-        timestamp: now - 5 * 60_000,
-        read: false,
-      },
-      {
-        id: "seed-2",
-        title: "Quick search enabled",
-        message: "Press Ctrl/Cmd + K to jump between dashboard pages.",
-        tone: "info",
-        timestamp: now - 4 * 60_000,
-        read: false,
-      },
-      {
-        id: "seed-3",
-        title: "Theme switch ready",
-        message: "Use the sun or moon toggle to change the panel theme.",
-        tone: "info",
-        timestamp: now - 3 * 60_000,
-        read: false,
-      },
-      {
-        id: "seed-4",
-        title: "Connection monitor active",
-        message:
-          "The topbar now checks browser and API availability automatically.",
-        tone: "success",
-        timestamp: now - 2 * 60_000,
-        read: false,
-      },
-      {
-        id: "seed-5",
-        title: "Notification center active",
-        message: "The bell button shows the latest 5 topbar notifications.",
-        tone: "success",
-        timestamp: now - 60_000,
-        read: false,
-      },
-    ];
-
-    setNotifications(seeded);
-    notificationsRef.current = seeded;
-    window.localStorage.setItem(
-      TOPBAR_NOTIFICATIONS_KEY,
-      JSON.stringify(seeded),
-    );
-  }, [currentUser?.name]);
+    return () => window.clearTimeout(timeout);
+  }, [loadNotifications]);
 
   useEffect(() => {
     const update = () => {
       const now = new Date();
+      setNotificationNow(now.getTime());
       setTime(
         now.toLocaleTimeString("en-US", {
           hour: "2-digit",
@@ -284,7 +225,9 @@ export default function Topbar({
   }, []);
 
   useEffect(() => {
-    void checkConnection();
+    const initialCheck = window.setTimeout(() => {
+      void checkConnection();
+    }, 0);
 
     const handleOnline = () => {
       void checkConnection();
@@ -302,6 +245,7 @@ export default function Topbar({
     window.addEventListener("offline", handleOffline);
 
     return () => {
+      window.clearTimeout(initialCheck);
       window.clearInterval(interval);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
@@ -352,9 +296,13 @@ export default function Topbar({
   }, []);
 
   useEffect(() => {
-    setQuery("");
-    setSearchOpen(false);
-    setNotificationOpen(false);
+    const timeout = window.setTimeout(() => {
+      setQuery("");
+      setSearchOpen(false);
+      setNotificationOpen(false);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
   }, [pathname]);
 
   useEffect(() => {
@@ -362,7 +310,8 @@ export default function Topbar({
       return;
     }
 
-    markNotificationsRead();
+    const timeout = window.setTimeout(markNotificationsRead, 0);
+    return () => window.clearTimeout(timeout);
   }, [markNotificationsRead, notificationOpen]);
 
   const shortcutLabel = useMemo(() => {
@@ -411,87 +360,32 @@ export default function Topbar({
     router.push(href);
   };
 
-  useEffect(() => {
-    if (connectionState === "checking") {
-      return;
-    }
-
-    if (lastConnectionNotificationRef.current === connectionState) {
-      return;
-    }
-
-    lastConnectionNotificationRef.current = connectionState;
-
-    if (connectionState === "online") {
-      pushNotification({
-        title: "Connection restored",
-        message: "Browser is online and the backend API is reachable.",
-        tone: "success",
-      });
-      return;
-    }
-
-    if (connectionState === "offline") {
-      pushNotification({
-        title: "Browser offline",
-        message:
-          "Network access was lost. Reconnect to restore dashboard features.",
-        tone: "error",
-      });
-      return;
-    }
-
-    pushNotification({
-      title: "Backend degraded",
-      message:
-        "Browser is online, but the API health check did not complete cleanly.",
-      tone: "warning",
-    });
-  }, [connectionState, pushNotification]);
-
   const handleThemeToggle = () => {
     const nextTheme = resolvedTheme === "light" ? "dark" : "light";
     setStoredTheme(nextTheme);
-    pushNotification({
-      title: "Theme updated",
-      message: `Dashboard theme switched to ${nextTheme} mode.`,
-      tone: "info",
-    });
   };
 
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => !notification.read).length,
-    [notifications],
+    () =>
+      notifications.filter(
+        (notification) => !readNotificationIds.has(notification.id),
+      ).length,
+    [notifications, readNotificationIds],
   );
 
-  const notificationToneMeta: Record<
-    NotificationTone,
-    { dot: string; border: string; background: string }
-  > = {
-    info: {
-      dot: "#3b82f6",
-      border: "rgba(59, 130, 246, 0.2)",
-      background: "rgba(59, 130, 246, 0.08)",
-    },
-    success: {
-      dot: "#10b981",
-      border: "rgba(16, 185, 129, 0.2)",
-      background: "rgba(16, 185, 129, 0.08)",
-    },
-    warning: {
-      dot: "#f59e0b",
-      border: "rgba(245, 158, 11, 0.2)",
-      background: "rgba(245, 158, 11, 0.08)",
-    },
-    error: {
-      dot: "#ef4444",
-      border: "rgba(239, 68, 68, 0.2)",
-      background: "rgba(239, 68, 68, 0.08)",
-    },
+  const notificationToneMeta = {
+    dot: "#3b82f6",
+    border: "rgba(59, 130, 246, 0.2)",
+    background: "rgba(59, 130, 246, 0.08)",
   };
 
-  const formatNotificationTimestamp = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
+  const formatNotificationTimestamp = (timestamp: string) => {
+    const timeMs = new Date(timestamp).getTime();
+    if (!Number.isFinite(timeMs)) {
+      return "";
+    }
+
+    const diff = notificationNow - timeMs;
 
     if (diff < 60_000) {
       return "Just now";
@@ -505,31 +399,13 @@ export default function Topbar({
       return `${Math.floor(diff / 3_600_000)}h ago`;
     }
 
-    return new Date(timestamp).toLocaleDateString("en-US", {
+    return new Date(timeMs).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     });
   };
 
   const handleRefresh = () => {
-    const nextNotifications = [
-      {
-        id: `topbar-notification-${Date.now()}-${notificationsRef.current.length}`,
-        title: "Dashboard refresh",
-        message: "The current page is reloading.",
-        tone: "info" as const,
-        timestamp: Date.now(),
-        read: false,
-      },
-      ...notificationsRef.current,
-    ].slice(0, MAX_TOPBAR_NOTIFICATIONS);
-
-    notificationsRef.current = nextNotifications;
-    window.localStorage.setItem(
-      TOPBAR_NOTIFICATIONS_KEY,
-      JSON.stringify(nextNotifications),
-    );
-    setNotifications(nextNotifications);
     window.location.reload();
   };
 
@@ -987,19 +863,24 @@ export default function Topbar({
                       color: "var(--text-muted)",
                     }}
                   >
-                    Latest {notifications.length} updates
+                    Latest {notifications.length} commits
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={markNotificationsRead}
+                  disabled={notifications.length === 0}
                   style={{
                     border: "none",
                     background: "transparent",
-                    color: "#3b82f6",
+                    color:
+                      notifications.length === 0
+                        ? "var(--text-muted)"
+                        : "#3b82f6",
                     fontSize: 11,
                     fontWeight: 600,
-                    cursor: "pointer",
+                    cursor:
+                      notifications.length === 0 ? "default" : "pointer",
                   }}
                 >
                   Mark all read
@@ -1007,18 +888,64 @@ export default function Topbar({
               </div>
 
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
-                {notifications.map((notification) => {
-                  const toneMeta = notificationToneMeta[notification.tone];
+                {notificationsLoading && (
+                  <div
+                    style={{
+                      padding: "18px 14px",
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    Loading commit history...
+                  </div>
+                )}
+
+                {!notificationsLoading && notificationsError && (
+                  <div
+                    style={{
+                      padding: "18px 14px",
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {notificationsError}
+                  </div>
+                )}
+
+                {!notificationsLoading &&
+                  !notificationsError &&
+                  notifications.length === 0 && (
+                    <div
+                      style={{
+                        padding: "18px 14px",
+                        fontSize: 12,
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      No recent commits found.
+                    </div>
+                  )}
+
+                {!notificationsLoading &&
+                  !notificationsError &&
+                  notifications.map((notification) => {
+                    const isRead = readNotificationIds.has(notification.id);
+                    const toneMeta = notificationToneMeta;
 
                   return (
-                    <div
+                    <a
                       key={notification.id}
+                      href={notification.url || undefined}
+                      target="_blank"
+                      rel="noreferrer"
                       style={{
+                        display: "block",
                         padding: "12px 14px",
                         borderBottom: "1px solid rgba(30, 42, 61, 0.18)",
-                        background: notification.read
-                          ? "transparent"
-                          : toneMeta.background,
+                        background: isRead ? "transparent" : toneMeta.background,
+                        color: "inherit",
+                        textDecoration: "none",
                       }}
                     >
                       <div
@@ -1054,7 +981,11 @@ export default function Topbar({
                                 fontSize: 12,
                                 fontWeight: 700,
                                 color: "var(--text-primary)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
                               }}
+                              title={notification.title}
                             >
                               {notification.title}
                             </span>
@@ -1066,7 +997,7 @@ export default function Topbar({
                               }}
                             >
                               {formatNotificationTimestamp(
-                                notification.timestamp,
+                                notification.committedAt,
                               )}
                             </span>
                           </div>
@@ -1081,7 +1012,7 @@ export default function Topbar({
                           </p>
                         </div>
                       </div>
-                    </div>
+                    </a>
                   );
                 })}
               </div>

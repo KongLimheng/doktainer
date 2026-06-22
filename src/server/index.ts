@@ -1,5 +1,5 @@
 import "dotenv/config";
-import Fastify from "fastify";
+import Fastify, { FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
@@ -25,6 +25,7 @@ import { organizationsRoutes } from "./routes/organizations";
 import { projectsRoutes } from "./routes/projects";
 import { gitProviderRoutes } from "./routes/git-providers";
 import { storageDestinationRoutes } from "./routes/storage-destinations";
+import { commitHistoryRoutes } from "./routes/commit-history";
 
 const PORT = parseInt(process.env.PORT || "4000");
 const HOST = process.env.HOST || "0.0.0.0";
@@ -177,14 +178,17 @@ async function start() {
   await app.register(storageDestinationRoutes, {
     prefix: `${API_PREFIX}/storage-destinations`,
   });
+  await app.register(commitHistoryRoutes, {
+    prefix: `${API_PREFIX}/notifications`,
+  });
 
   // ── Error handler ─────────────────────────────────────
-  app.setErrorHandler((error: any, _req, reply) => {
+  app.setErrorHandler((error: FastifyError, _req, reply) => {
     app.log.error(error);
-    const code = (error as any).statusCode || 500;
+    const code = error.statusCode || 500;
     reply.status(code).send({
       success: false,
-      error: (error as any).message || "Internal Server Error",
+      error: error.message || "Internal Server Error",
       code,
     });
   });

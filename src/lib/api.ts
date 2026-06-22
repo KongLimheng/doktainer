@@ -1065,6 +1065,32 @@ export interface CreatedApiKeyRecord extends ApiKeyRecord {
   rawKey: string;
 }
 
+export interface CommitHistoryNotificationRecord {
+  id: string;
+  sha: string;
+  shortSha: string;
+  title: string;
+  message: string;
+  authorName: string;
+  authorUsername: string;
+  authorAvatarUrl: string | null;
+  url: string;
+  committedAt: string;
+}
+
+export const topbarNotificationsApi = {
+  listCommits: () =>
+    get<{
+      success: boolean;
+      data: CommitHistoryNotificationRecord[];
+      meta: {
+        repository: string;
+        branch: string;
+        path: string;
+      };
+    }>("/notifications/commits", { timeoutMs: 15000 }),
+};
+
 export const apiKeys = {
   list: () => get<{ success: boolean; data: ApiKeyRecord[] }>("/api-keys"),
 
