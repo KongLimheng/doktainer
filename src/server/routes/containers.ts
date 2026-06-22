@@ -647,11 +647,15 @@ function toNullableValue(value?: string | null): string | null {
   return toOptionalValue(value) ?? null;
 }
 
+function normalizeRemotePath(path: string) {
+  return pathPosix.normalize(path.replace(/\\/g, "/"));
+}
+
 function normalizeDeploymentChildPath(
   deploymentPath: string,
   relativePath?: string | null,
 ) {
-  const base = pathPosix.normalize(deploymentPath);
+  const base = normalizeRemotePath(deploymentPath);
   const child = relativePath?.trim()
     ? pathPosix.normalize(pathPosix.join(base, relativePath, ".env"))
     : pathPosix.join(base, ".env");
@@ -664,9 +668,106 @@ function normalizeDeploymentChildPath(
 }
 
 function isPathInside(basePath: string, targetPath: string) {
-  const base = pathPosix.normalize(basePath);
-  const target = pathPosix.normalize(targetPath);
+  const base = normalizeRemotePath(basePath);
+  const target = normalizeRemotePath(targetPath);
   return target === base || target.startsWith(`${base}/`);
+}
+
+type DockerInspectMount = {
+  Source?: string;
+  Destination?: string;
+  RW?: boolean;
+};
+
+function getInspectMounts(inspect: unknown): DockerInspectMount[] {
+  if (
+    typeof inspect !== "object" ||
+    inspect === null ||
+    !("Mounts" in inspect) ||
+    !Array.isArray(inspect.Mounts)
+  ) {
+    return [];
+  }
+
+  return inspect.Mounts.filter(
+    (mount): mount is DockerInspectMount =>
+      typeof mount === "object" && mount !== null,
+  );
+}
+
+function isUsableMountPath(value?: string) {
+  return Boolean(value?.trim().startsWith("/"));
+}
+
+export function resolveContainerPathToHostMountPath(
+  containerPath: string,
+  mounts: DockerInspectMount[],
+) {
+  const normalizedContainerPath = normalizeRemotePath(containerPath);
+  const matchedMount = mounts
+    .filter(
+      (mount) =>
+        isUsableMountPath(mount.Source) &&
+        isUsableMountPath(mount.Destination),
+    )
+    .map((mount) => ({
+      source: normalizeRemotePath(mount.Source!),
+      destination: normalizeRemotePath(mount.Destination!),
+    }))
+    .filter(
+      (mount) =>
+        normalizedContainerPath === mount.destination ||
+        normalizedContainerPath.startsWith(`${mount.destination}/`),
+    )
+    .sort((left, right) => right.destination.length - left.destination.length)
+    .at(0);
+
+  if (!matchedMount) return null;
+
+  const relativePath =
+    normalizedContainerPath === matchedMount.destination
+      ? ""
+      : normalizedContainerPath.slice(matchedMount.destination.length + 1);
+
+  return pathPosix.normalize(pathPosix.join(matchedMount.source, relativePath));
+}
+
+function getWritableMountRootsForPath(targetPath: string, mounts: DockerInspectMount[]) {
+  const normalizedTargetPath = normalizeRemotePath(targetPath);
+
+  return mounts
+    .filter(
+      (mount) =>
+        mount.RW !== false &&
+        isUsableMountPath(mount.Source) &&
+        isUsableMountPath(mount.Destination),
+    )
+    .map((mount) => normalizeRemotePath(mount.Source!))
+    .filter((source) => isPathInside(source, normalizedTargetPath));
+}
+
+export function parseStoredVolumeMounts(value: unknown): DockerInspectMount[] {
+  return parseStoredStringArray(value).flatMap((entry) => {
+    const [sourceRaw, destinationRaw, modeRaw] = entry
+      .split(":")
+      .map((part) => part.trim());
+    const source = sourceRaw ? normalizeRemotePath(sourceRaw) : "";
+    const destination = destinationRaw
+      ? normalizeRemotePath(destinationRaw)
+      : "";
+
+    if (!source.startsWith("/") || !destination.startsWith("/")) {
+      return [];
+    }
+
+    return [
+      {
+        Source: source,
+        Destination: destination,
+        RW: modeRaw !== "ro",
+      },
+    ];
+  });
 }
 
 function getInspectWorkingDir(inspect: unknown) {
@@ -1864,39 +1965,48 @@ export async function containerRoutes(app: FastifyInstance) {
         (path): path is string => Boolean(path),
       );
       const runtimeId = container.dockerId || container.name;
-      const priorityContainerPaths = ["/app/.env"];
-      const checkedPriorityContainerPaths: string[] = [];
 
       try {
-        for (const candidatePath of priorityContainerPaths) {
-          checkedPriorityContainerPaths.push(candidatePath);
-          try {
-            const file = await ssh.readContainerFile(
-              container.server,
-              runtimeId,
-              candidatePath,
-            );
+        const containerCandidatePaths = new Set<string>();
+        let inspect: unknown = null;
+        let projectMounts = parseStoredVolumeMounts(container.volumes);
 
-            return reply.send({
-              success: true,
-              data: {
-                found: true,
-                path: file.path,
-                content: file.content,
-                checkedPaths: checkedPriorityContainerPaths,
-                source: "container",
-                message: "Project .env file loaded from container filesystem.",
-              },
-            });
-          } catch {
-            // Continue to deployment path and other common container paths.
+        try {
+          inspect = await ssh.dockerInspect(container.server, runtimeId);
+        } catch {
+          // Keep stored deployment candidates and common fallback paths.
+        }
+
+        if (inspect) {
+          projectMounts = [...getInspectMounts(inspect), ...projectMounts];
+          const workingDir = getInspectWorkingDir(inspect);
+          if (workingDir) {
+            containerCandidatePaths.add(pathPosix.join(workingDir, ".env"));
           }
         }
 
-        const data = await ssh.readDeploymentEnvFile(
-          container.server,
-          candidatePaths,
-        );
+        projectMounts.forEach((mount) => {
+          if (isUsableMountPath(mount.Destination)) {
+            containerCandidatePaths.add(
+              pathPosix.join(normalizeRemotePath(mount.Destination!), ".env"),
+            );
+          }
+        });
+
+        containerCandidatePaths.add("/app/.env");
+        containerCandidatePaths.add("/workspace/.env");
+        containerCandidatePaths.add("/var/www/html/.env");
+
+        const mountCandidatePaths = Array.from(containerCandidatePaths)
+          .map((path) =>
+            resolveContainerPathToHostMountPath(path, projectMounts),
+          )
+          .filter((path): path is string => Boolean(path));
+
+        const data = await ssh.readDeploymentEnvFile(container.server, [
+          ...candidatePaths,
+          ...mountCandidatePaths,
+        ]);
 
         if (data.found) {
           return reply.send({
@@ -1904,58 +2014,41 @@ export async function containerRoutes(app: FastifyInstance) {
             data: {
               ...data,
               source: "project",
-              message: "Project .env file loaded from deployment path.",
+              message:
+                "Project .env file loaded from deployment path or mounted project path.",
             },
           });
         }
 
-        const containerCandidatePaths = new Set<string>();
-
-        priorityContainerPaths.forEach((path) =>
-          containerCandidatePaths.add(path),
-        );
-
-        try {
-          const inspect = await ssh.dockerInspect(container.server, runtimeId);
-          const workingDir = getInspectWorkingDir(inspect);
-          if (workingDir) {
-            containerCandidatePaths.add(pathPosix.join(workingDir, ".env"));
-          }
-        } catch {
-          // Keep fallback candidates below when inspect is unavailable.
-        }
-
-        containerCandidatePaths.add("/workspace/.env");
-        containerCandidatePaths.add("/var/www/html/.env");
-
         const checkedContainerPaths: string[] = [];
-        for (const candidatePath of containerCandidatePaths) {
-          if (priorityContainerPaths.includes(candidatePath)) continue;
-          checkedContainerPaths.push(candidatePath);
-          try {
-            const file = await ssh.readContainerFile(
-              container.server,
-              runtimeId,
-              candidatePath,
-            );
+        if (container.status === "RUNNING") {
+          for (const candidatePath of containerCandidatePaths) {
+            checkedContainerPaths.push(candidatePath);
+            try {
+              const file = await ssh.readContainerFile(
+                container.server,
+                runtimeId,
+                candidatePath,
+              );
 
-            return reply.send({
-              success: true,
-              data: {
-                found: true,
-                path: file.path,
-                content: file.content,
-                checkedPaths: [
-                  ...checkedPriorityContainerPaths,
-                  ...data.checkedPaths,
-                  ...checkedContainerPaths,
-                ],
-                source: "container",
-                message: "Project .env file loaded from container filesystem.",
-              },
-            });
-          } catch {
-            // Try the next common app path.
+              return reply.send({
+                success: true,
+                data: {
+                  found: true,
+                  path: file.path,
+                  content: file.content,
+                  checkedPaths: [
+                    ...data.checkedPaths,
+                    ...checkedContainerPaths,
+                  ],
+                  source: "container",
+                  message:
+                    "Project .env file loaded from container filesystem.",
+                },
+              });
+            } catch {
+              // Try the next common app path.
+            }
           }
         }
 
@@ -1964,13 +2057,12 @@ export async function containerRoutes(app: FastifyInstance) {
           data: {
             ...data,
             checkedPaths: [
-              ...checkedPriorityContainerPaths,
               ...data.checkedPaths,
               ...checkedContainerPaths,
             ],
             source: "missing",
             message:
-              "No project .env file was found at the checked deployment or container paths.",
+              "No project .env file was found at the checked deployment, mounted project, or container paths.",
           },
         });
       } catch (err: unknown) {
@@ -2049,24 +2141,45 @@ export async function containerRoutes(app: FastifyInstance) {
 
         const deploymentPath =
           container.deploymentSource?.deploymentPath?.trim();
+        const normalizedEnvPath = normalizeRemotePath(body.data.path);
+        const storedMounts = parseStoredVolumeMounts(container.volumes);
+        let canWriteProjectEnv = deploymentPath
+          ? isPathInside(deploymentPath, normalizedEnvPath)
+          : false;
 
-        if (!deploymentPath) {
-          return reply.status(400).send({
-            success: false,
-            error: "Deployment path is not available for this container",
-          });
+        if (!canWriteProjectEnv) {
+          canWriteProjectEnv =
+            getWritableMountRootsForPath(normalizedEnvPath, storedMounts)
+              .length > 0;
         }
 
-        if (!isPathInside(deploymentPath, body.data.path)) {
+        if (!canWriteProjectEnv) {
+          try {
+            const inspect = await ssh.dockerInspect(
+              container.server,
+              container.dockerId || container.name,
+            );
+            canWriteProjectEnv =
+              getWritableMountRootsForPath(
+                normalizedEnvPath,
+                [...getInspectMounts(inspect), ...storedMounts],
+              ).length > 0;
+          } catch {
+            canWriteProjectEnv = false;
+          }
+        }
+
+        if (!canWriteProjectEnv) {
           return reply.status(400).send({
             success: false,
-            error: "Project .env path is outside the deployment directory",
+            error:
+              "Project .env path is outside the deployment directory or writable mounted project path",
           });
         }
 
         const data = await ssh.writeDeploymentEnvFile(
           container.server,
-          body.data.path,
+          normalizedEnvPath,
           body.data.content,
         );
 

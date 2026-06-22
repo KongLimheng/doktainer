@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Loader2,
+  FileWarning,
   RotateCcw,
   Save,
   ShieldAlert,
@@ -159,6 +160,7 @@ export default function EnvironmentTabPanel({
     [editorContent],
   );
   const editableSource = getEditableSource(environment.editor.source);
+  const editorDisabled = !environment.editor.found;
   const canSave =
     Boolean(environment.editor.found && environment.editor.path) &&
     editableSource !== null;
@@ -235,32 +237,68 @@ export default function EnvironmentTabPanel({
           }}
         >
           <div>
-            <textarea
-              value={editorContent}
-              onChange={(event) => {
-                setEditorDraft({
-                  source: environment.editor.content,
-                  content: event.target.value,
-                  status: "idle",
-                });
-                setEditorNotice(null);
-              }}
-              spellCheck={false}
-              style={{
-                width: "100%",
-                minHeight: 480,
-                resize: "vertical",
-                border: "1px solid var(--border)",
-                borderRadius: 7,
-                background: "var(--terminal-surface)",
-                color: "var(--terminal-body)",
-                padding: 12,
-                fontFamily: "var(--font--code)",
-                fontSize: 12,
-                lineHeight: 1.6,
-                outline: "none",
-              }}
-            />
+            {editorDisabled ? (
+              <div
+                style={{
+                  minHeight: 480,
+                  border: "1px solid var(--border)",
+                  borderRadius: 7,
+                  background: "var(--terminal-surface)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  color: "var(--terminal-body)",
+                  textAlign: "center",
+                  padding: 24,
+                }}
+              >
+                <FileWarning
+                  size={30}
+                  style={{ color: "var(--accent-yellow)" }}
+                />
+                <strong>Project .env file is unavailable</strong>
+                <span
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    maxWidth: 560,
+                  }}
+                >
+                  {environment.editor.message ||
+                    "No project .env file was found in the deployment or mounted project path."}
+                </span>
+              </div>
+            ) : (
+              <textarea
+                value={editorContent}
+                onChange={(event) => {
+                  setEditorDraft({
+                    source: environment.editor.content,
+                    content: event.target.value,
+                    status: "idle",
+                  });
+                  setEditorNotice(null);
+                }}
+                spellCheck={false}
+                style={{
+                  width: "100%",
+                  minHeight: 480,
+                  resize: "vertical",
+                  border: "1px solid var(--border)",
+                  borderRadius: 7,
+                  background: "var(--terminal-surface)",
+                  color: "var(--terminal-body)",
+                  padding: 12,
+                  fontFamily: "var(--font--code)",
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                  outline: "none",
+                }}
+              />
+            )}
             <div
               style={{
                 display: "flex",
@@ -279,7 +317,7 @@ export default function EnvironmentTabPanel({
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  disabled={saving}
+                  disabled={saving || editorDisabled}
                   onClick={() => {
                     setEditorDraft({
                       source: editorDraft.source,
@@ -299,7 +337,7 @@ export default function EnvironmentTabPanel({
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  disabled={saving}
+                  disabled={saving || editorDisabled}
                   onClick={() => {
                     const validation = validateDotenvContent(editorContent);
                     setEditorNotice(validation);
@@ -371,10 +409,10 @@ export default function EnvironmentTabPanel({
                     : editorDirty
                       ? "You have unsaved editor changes."
                       : environment.editor.found
-                        ? environment.editor.source === "container"
-                          ? "Editor is loaded from container filesystem .env."
-                          : "Editor is loaded from project .env file."
-                        : "Project .env was not found. Runtime env is shown as read-only fallback."}
+                          ? environment.editor.source === "container"
+                            ? "Editor is loaded from container filesystem .env."
+                            : "Editor is loaded from project .env file."
+                        : "Editor is disabled because no project .env file was found."}
               </p>
               <p
                 style={{

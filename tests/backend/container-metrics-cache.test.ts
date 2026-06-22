@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   clearContainerMetricsCacheForTest,
   invalidateContainerMetricsCache,
+  parseStoredVolumeMounts,
   readContainerMetricsWithCache,
+  resolveContainerPathToHostMountPath,
 } from "../../src/server/routes/containers";
 
 const stats = {
@@ -119,3 +121,56 @@ test("container metrics cache does not retain failed samples", async () => {
   assert.equal(loadCount, 2);
 });
 
+test("project env path resolver maps container paths to the most specific host mount", () => {
+  const mounts = [
+    {
+      Source: "/srv/apps/example",
+      Destination: "/app",
+      RW: true,
+    },
+    {
+      Source: "/srv/apps/example/storage",
+      Destination: "/app/storage",
+      RW: true,
+    },
+  ];
+
+  assert.equal(
+    resolveContainerPathToHostMountPath("/app/.env", mounts),
+    "/srv/apps/example/.env",
+  );
+  assert.equal(
+    resolveContainerPathToHostMountPath("/app/storage/.env", mounts),
+    "/srv/apps/example/storage/.env",
+  );
+  assert.equal(
+    resolveContainerPathToHostMountPath("/workspace/.env", mounts),
+    null,
+  );
+});
+
+test("project env path resolver can use stored container volume bindings", () => {
+  const mounts = parseStoredVolumeMounts([
+    "/srv/laravel:/bitnami/laravel",
+    "named-volume:/ignored",
+    "/srv/read-only:/readonly:ro",
+  ]);
+
+  assert.deepEqual(mounts, [
+    {
+      Source: "/srv/laravel",
+      Destination: "/bitnami/laravel",
+      RW: true,
+    },
+    {
+      Source: "/srv/read-only",
+      Destination: "/readonly",
+      RW: false,
+    },
+  ]);
+  assert.equal(
+    resolveContainerPathToHostMountPath("/bitnami/laravel/.env", mounts),
+    "/srv/laravel/.env",
+  );
+  assert.equal(mounts[0]?.Destination, "/bitnami/laravel");
+});
