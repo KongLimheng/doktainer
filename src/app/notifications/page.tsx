@@ -210,7 +210,7 @@ export default function NotificationsPage() {
       pushToast({
         tone: "error",
         title: "Provider Not Found",
-        message: "Notification provider tidak ditemukan.",
+        message: "The selected notification provider was not found.",
       });
       return;
     }
@@ -225,7 +225,7 @@ export default function NotificationsPage() {
         tone: "warning",
         title: "Live Test Unavailable",
         message:
-          "Live test saat ini hanya tersedia untuk Email, Telegram, Discord, dan Custom Webhook.",
+          "Live test currently only available for Email, Telegram, Discord, and Custom Webhook.",
       });
       return;
     }
