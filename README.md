@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./images/previews/icon-dokta.png" alt="Doktainer Mascot (DOKTA)" width="220"/>
+  <img src="./images/previews/ic-doktainer-dark-logo.webp" alt="Doktainer Mascot (DOKTA)" width="100%"/>
   
 # Doktainer - Manage Docker, Simplify Everything
 
