@@ -117,6 +117,23 @@ export default function S3StoragePage() {
   }, []);
 
   const upsertDestination = async (draft: DestinationDraft) => {
+    const missing = [
+      !draft.accessKeyId && "Access Key ID",
+      !draft.secretAccessKey && "Secret Access Key",
+      !draft.region && "Region",
+      !draft.bucket && "Bucket",
+      !draft.name && "Destination Name",
+    ].filter(Boolean) as string[];
+
+    if (missing.length > 0) {
+      pushToast({
+        tone: "warning",
+        // message: `Fill in the following fields before saving: ${missing.join(", ")}`,
+        message: `Fill in the available fields before proceeding with saving.`,
+      });
+      return false;
+    }
+
     const pendingId = draft.id || "new-destination";
     setSavingDestinationId(pendingId);
     try {
@@ -133,8 +150,8 @@ export default function S3StoragePage() {
         message:
           response.message ||
           (draft.id
-            ? "Storage destination berhasil diperbarui"
-            : "Storage destination berhasil ditambahkan"),
+            ? "Storage destination has been updated successfully"
+            : "Storage destination has been created successfully"),
       });
       return true;
     } catch (err) {
@@ -143,7 +160,7 @@ export default function S3StoragePage() {
         message:
           err instanceof Error
             ? err.message
-            : "Gagal menyimpan storage destination",
+            : "Failed to save storage destination",
       });
       return false;
     } finally {
@@ -152,6 +169,23 @@ export default function S3StoragePage() {
   };
 
   const verifyDestination = async (draft: DestinationDraft) => {
+    const missing = [
+      !draft.accessKeyId && "Access Key ID",
+      !draft.secretAccessKey && "Secret Access Key",
+      !draft.region && "Region",
+      !draft.bucket && "Bucket",
+      !draft.name && "Destination Name",
+    ].filter(Boolean) as string[];
+
+    if (missing.length > 0) {
+      pushToast({
+        tone: "warning",
+        // message: `Fill in the following fields before verifying: ${missing.join(", ")}`,
+        message: `Fill in the available fields before proceeding with verification.`,
+      });
+      return;
+    }
+
     setActionLoading(`verify-${draft.id ?? "draft"}`);
 
     try {
@@ -169,7 +203,7 @@ export default function S3StoragePage() {
         message:
           err instanceof Error
             ? err.message
-            : "Gagal memverifikasi storage destination",
+            : "Failed to verify destination connection",
       });
     } finally {
       setActionLoading(null);
@@ -194,7 +228,8 @@ export default function S3StoragePage() {
       );
       pushToast({
         tone: "success",
-        message: response.message || "Status storage destination diperbarui",
+        message:
+          response.message || "Storage destination status updated successfully",
       });
     } catch (err) {
       pushToast({
@@ -202,7 +237,7 @@ export default function S3StoragePage() {
         message:
           err instanceof Error
             ? err.message
-            : "Gagal memperbarui status storage destination",
+            : "Failed to update storage destination status",
       });
     } finally {
       setSavingDestinationId(null);
@@ -222,7 +257,9 @@ export default function S3StoragePage() {
       );
       pushToast({
         tone: "success",
-        message: response.message || "Storage destination berhasil dihapus",
+        message:
+          response.message ||
+          "Storage destination has been deleted successfully",
       });
     } catch (err) {
       pushToast({
@@ -230,7 +267,7 @@ export default function S3StoragePage() {
         message:
           err instanceof Error
             ? err.message
-            : "Gagal menghapus storage destination",
+            : "Failed to delete storage destination",
       });
     } finally {
       setSavingDestinationId(null);
