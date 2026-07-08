@@ -11,316 +11,185 @@
 
   </div>
 
-Doktainer is an open-source, self-hosted platform for managing servers, applications, containers, domains, SSL, backups, and deployment operations from a single web panel.
+---
 
-Doktainer is intended for teams or individuals who want to own their own deployment panel without depending on a specific cloud vendor, while still retaining full control over their servers and data.
+## Overview
 
-## Key Features
+Doktainer is an open-source, self-hosted Docker management platform that helps you manage servers, applications, containers, domains, SSL, backups, and deployments from a single web interface. Designed for individuals and teams who want full control over their infrastructure without vendor lock-in.
 
-- Multi-server management, Multi-Project and Multi-Container in one panel.
-- Docker-based application and container management.
-- Support for domains, SSL, networks, security, logs, metrics, and terminal access.
-- Organizations, role-based access, API keys, and user settings configuration.
-- Git provider, storage destination, and notification/backup integrations.
-- Modern panel UI with Next.js and a backend API that runs separately at runtime.
-- Support for local development and Docker deployment to a VPS or online server.
+---
 
-## System Requirements
+## ✨ Features
 
-### Minimum for development
+Doktainer includes multiple features that you can use.
 
-- Node.js 22 or a version compatible with this project's dependencies.
-- npm 10 or the version bundled with modern Node.js releases.
-- PostgreSQL 16 or a compatible PostgreSQL service.
-- Docker Desktop or Docker Engine + Docker Compose v2 if you want to deploy with containers.
+- Multi-server management
+- Docker & container management
+- Application deployment
+- Domain & SSL management
+- Logs, metrics & monitoring
+- Organizations & Role-Based Access Control (RBAC)
+- API Keys
+- Git integrations
+- Backup integrations
+- Built-in terminal
+- Fastify API + Next.js frontend
+- Self-hosted & Open Source
 
-### Default ports
+---
 
-- `3000` for the Next.js frontend
-- `4000` for the Fastify backend
-- `5432` for PostgreSQL
+## Requirements
+
+- Node.js 22+
+- PostgreSQL 16+
+- Docker Engine + Compose v2 (optional)
+
+---
+
+## Quick Start
+
+To get started, run the following command on a VPS:
+
+```bash
+curl -sSL https://doktainer.com/install.sh | sh
+```
 
 ## Local Quick Start
 
-### 1. Clone the repository
+### Clone the repository
 
 ```bash
 git clone https://github.com/DoktainerApp/doktainer.git
 cd doktainer
 ```
 
-### 2. Install dependencies
+### Install dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Prepare the environment
-
-Copy the example environment file and adjust the values.
+### Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-For Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Minimum values that need attention:
-
-```env
-NODE_ENV=development
-PORT=4000
-HOST=0.0.0.0
-DATABASE_URL=postgresql://doktainer:doktainerdb@postgres:5432/doktainer?schema=public
-JWT_SECRET=change-this-to-a-secure-secret-with-32-chars-min
-ENCRYPTION_KEY=change-this-to-a-secure-32-char-key
-FRONTEND_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
-NEXT_PUBLIC_WS_URL=ws://localhost:4000
-```
-
-Important notes:
-
-- `JWT_SECRET` must be at least 32 characters long, otherwise the backend will fail to start.
-- `DATABASE_URL` must be valid. If it is incorrect, authentication and backend startup will fail early.
-- `ENCRYPTION_KEY` should be changed before being used in a real environment.
-
-### 4. Prepare the database
-
-Make sure PostgreSQL is running, then generate the Prisma client and synchronize the schema:
+### Prepare the database
 
 ```bash
 npm run db:generate
 npm run db:push
 ```
 
-If you use the development migration workflow, you can also run:
-
-```bash
-npm run db:migrate
-```
-
-### 5. Run the development server
+### Start development
 
 ```bash
 npm run dev
 ```
 
-Once it succeeds:
+Open:
 
-- the frontend is available at `http://localhost:3000`
-- the backend is available at `http://localhost:4000`
-- the backend health check is available at `http://localhost:4000/health`
+```
+Frontend
+http://localhost:3000
 
-## Running Locally in Production Mode Without Docker
+Backend
+http://localhost:4000
+```
 
-If you want to run production mode on a local machine:
+---
+
+## 🐳 Docker Deployment
+
+Doktainer includes everything needed for Docker deployment.
 
 ```bash
-npm run build
-npm run start
+docker compose up -d
 ```
 
-This command will:
+For production deployments, VPS installation, reverse proxy, SSL, and runtime configuration, please refer to the documentation.
 
-- build the Next.js frontend
-- compile the TypeScript backend into the `dist` folder
-- run the production frontend and production backend together
+---
 
-## Online / VPS Installation With Docker
+## 📚 Documentation
 
-This approach is best suited for online servers, VPS instances, or self-hosted environments. This project already provides:
+Complete documentation is available at
 
-- `Dockerfile`
-- `docker-compose.yml`
-- `docker-compose.build.yml`
-- `docker-entrypoint.sh`
-- `.env.docker`
+> https://docs.doktainer.com
 
-### Recommended deployment
+Including:
 
-Use this flow if you build the image directly from the project source on the server.
+- Installation
+- Docker Deployment
+- Reverse Proxy
+- Environment Variables
+- Development
+- API
+- Troubleshooting
 
-1. Copy the project to the server.
-2. Edit `.env.docker` as needed.
-3. Run:
+---
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
-```
+## 🏗️ Architecture
 
-If you want to use an image from a registry, adjust `DOKTAINER_IMAGE` in `.env.docker` and make sure your deployment strategy remains consistent with the active Compose definitions.
+Doktainer consists of:
 
-### Services that are started
+- **Next.js** frontend
+- **Fastify** backend
+- **PostgreSQL**
+- **Docker Engine**
 
-The default Docker Compose setup will run:
+Designed as a modular monolith for a simple development experience while keeping frontend and backend responsibilities separated.
 
-- `postgres` for the PostgreSQL database
-- `app` for the Next.js frontend and Fastify backend in a single application container
+---
 
-Default port mappings:
+## 🛣️ Roadmap
 
-- `3000:3000` for the frontend
-- `4000:4000` for the backend
-- `5432:5432` for PostgreSQL
+- ✅ Multi Project
+- ✅ Multi Server
+- ✅ Docker Management
+- ✅ Organizations
+- ✅ Domains & SSL
+- ✅ RBAC
+- ✅ Terminal
+- ✅ App Installer
+- ✅ Docker Compose Templates
+- ✅ One-Click Deployments
+- 🚧 Docker SWARM
+- 🚧 Cluster Management
+- 🚧 Kubernetes Support
 
-### Recommended Docker deployment steps
+---
 
-1. Copy the project to a Linux server/VPS.
-2. Make sure Docker and Docker Compose v2 are installed.
-3. Edit `.env.docker` and replace the default secrets.
-4. Run the Compose build/deploy command.
-5. Check the container logs.
-6. Verify `http://SERVER-IP:3000` and `http://SERVER-IP:4000/health`.
-7. Set up a reverse proxy and HTTPS for public production use.
+## 🤝 Contributing
 
-Example for viewing logs:
+Contributions are welcome!
 
-```bash
-docker compose logs -f app
-docker compose logs -f postgres
-```
+Whether it's fixing bugs, improving documentation, or proposing new features, we'd love to have your help.
 
-Stopping the services:
+Please read our Contributing Guide before opening a Pull Request.
 
-```bash
-docker compose down
-```
+---
 
-Stopping the services and removing the database volume:
+## ❤️ Sponsors
 
-```bash
-docker compose down -v
-```
+Thanks to everyone supporting Doktainer.
 
-## Docker Runtime Configuration
+| Sponsor                                    | Sponsor Type      |
+| ------------------------------------------ | ----------------- |
+| [**IDCloudhost**](https://idcloudhost.com) | Cloud Hosting     |
+| [**Sumopod**](https://sumopod.com)         | Cloud Hosting     |
+| [**PAAS ID**](https://paas.id)             | Cloud Hosting     |
+| [**Ktikme**](https://ktik.me)              | Profile BIO-Link  |
+| [**Dahono Labs**](https://labs.dahono.com) | AI Agent Services |
 
-The `.env.docker` file is the main environment source for container deployment. The most important variables are:
+Interested in sponsoring Doktainer?
 
-```env
-POSTGRES_DB=doktainer
-POSTGRES_USER=doktainer
-POSTGRES_PASSWORD=replace-this-password
-POSTGRES_PORT=5432
+Join our [**Discord Community**](https://discord.gg/3HF85Cd6fp).
 
-NODE_ENV=production
-HOST=0.0.0.0
-PORT=4000
-DATABASE_URL=postgresql://doktainer:replace-this-password@postgres:5432/doktainer?schema=public
+---
 
-JWT_SECRET=replace-this-with-a-secure-32-char-secret
-ENCRYPTION_KEY=replace-this-with-a-secure-32-char-key
-
-NEXT_PUBLIC_PANEL_NAME=DOKTAINER
-NEXT_PUBLIC_VERSION=v0.1.3
-NEXT_PUBLIC_BATCH=Batch-20260623
-NEXT_PUBLIC_API_PORT=4000
-```
-
-Important deployment notes:
-
-- For purpose deployment, `NEXT_PUBLIC_API_URL` should be left empty so the browser uses the same-origin `/api/v1`.
-- If Doktainer runs behind Nginx, Traefik, Caddy, or Cloudflare Tunnel, enable `TRUST_PROXY=true`.
-- Set `FRONTEND_URL` or `NEXT_PUBLIC_PANEL_URL` only if you truly want to force a single canonical public URL.
-- Do not use `localhost`, `0.0.0.0`, or an internal Docker host as the public production URL.
-
-## Reverse Proxy and HTTPS
-
-For online use, it is highly recommended to place Doktainer behind a reverse proxy such as:
-
-- Nginx
-- Traefik
-- Caddy
-- Cloudflare Tunnel
-
-The goals are to:
-
-- provide HTTPS
-- forward host and protocol headers correctly
-- simplify public access with your own domain
-- reduce direct backend exposure to the internet
-
-If you use a reverse proxy, check the following two things:
-
-- set `TRUST_PROXY=true`
-- set `FRONTEND_URL=https://your-domain.com` if you need consistent absolute URLs
-
-## Available Development Workflow
-
-Main project scripts:
-
-```bash
-npm run dev
-npm run build
-npm run start
-npm run lint
-npm run test
-npm run db:generate
-npm run db:push
-npm run db:migrate
-npm run db:studio
-```
-
-Function summary:
-
-- `npm run dev` runs the frontend and backend in development mode.
-- `npm run build` builds the frontend and compiles the backend.
-- `npm run start` runs the production build output.
-- `npm run lint` runs ESLint.
-- `npm run test` runs the TypeScript test suite.
-- `npm run db:generate` generates the Prisma client.
-- `npm run db:push` synchronizes the schema to the database.
-- `npm run db:migrate` creates and applies development migrations.
-- `npm run db:studio` opens Prisma Studio.
-
-## Troubleshooting
-
-### Login or register fails
-
-If login or registration returns `Internal Server Error`, almost always start with the following checks:
-
-1. make sure `DATABASE_URL` is correct
-2. make sure PostgreSQL is actually running
-3. make sure `JWT_SECRET` is valid and at least 32 characters long
-4. rerun `npm run db:generate`, then `npm run db:push`
-
-### Backend fails to start
-
-Common possible causes:
-
-- port `4000` is already used by another process
-- PostgreSQL connection fails
-- `JWT_SECRET` is empty or too short
-
-### App container exits immediately
-
-Check:
-
-- `DATABASE_URL` in `.env.docker`
-- the Postgres password in `POSTGRES_PASSWORD`
-- container logs with `docker compose logs -f app`
-
-This project's Docker entrypoint will:
-
-- wait until the database can be accessed
-- run `prisma migrate deploy` if migrations are available
-- fall back to `prisma db push` if no migrations exist yet
-- start the backend and frontend in a single container
-
-## Architecture Notes
-
-Doktainer in this folder uses a modular monolith repository model with two main runtimes:
-
-- Next.js for the web interface on port `3000`
-- Fastify API on port `4000`
-
-Both are combined in a single project to simplify development and deployment, while keeping the frontend and backend separation clear at the runtime level.
-
-## License
+## 📄 License
 
 Doktainer uses the MIT license. See the `LICENSE` file in the repository root for license details.
 
@@ -334,21 +203,8 @@ If you wish to use Doktainer for commercial purposes, business operations, or as
 
 ---
 
-## ❤️ Sponsors
+<div align="center">
 
-Thanks to our sponsors for supporting Doktainer.
+Built with ❤️ by KodekaTeam
 
-| Sponsor         | Website                 | Sponsor Type      |
-| --------------- | ----------------------- | ----------------- |
-| **IDCloudhost** | https://idcloudhost.com | Cloud Hosting     |
-| **SumoPod**     | https://sumopod.com     | Cloud Hosting     |
-| **PAAS ID**     | https://paas.id         | Cloud Hosting     |
-| **Ktikme**      | https://ktik.me         | Profile BIO-Link  |
-| **Dahono Labs** | https://labs.dahono.com | AI Agent Services |
-
-Interested in sponsoring Doktainer?
-Contact us at [**Discord Server Community**](https://discord.gg/3HF85Cd6fp)
-
----
-
-<p align="center">Built with ❤️ by the KodekaTeam</p>
+</div>
