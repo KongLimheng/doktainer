@@ -12,7 +12,9 @@ import ProjectsToolbar from "@/app/projects/components/ProjectsToolbar";
 import {
   type ProjectCreateBody,
   type ProjectRecord,
+  type Server,
   projectsApi,
+  servers as serversApi,
 } from "@/lib/api";
 import { useToastManager } from "@/lib/use-toast-manager";
 
@@ -36,6 +38,7 @@ export default function ProjectsPage() {
   );
   const [creatingProject, setCreatingProject] = useState(false);
   const [updatingProject, setUpdatingProject] = useState(false);
+  const [servers, setServers] = useState<Server[]>([]);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null,
   );
@@ -85,6 +88,19 @@ export default function ProjectsPage() {
 
     return () => window.cancelAnimationFrame(frame);
   }, [load]);
+
+  const loadServers = useCallback(async () => {
+    try {
+      const response = await serversApi.list();
+      setServers(response.data ?? []);
+    } catch {
+      // servers are non-critical for existing page loads
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadServers();
+  }, [loadServers]);
 
   const summary = useMemo(() => {
     const environmentCount = projects.reduce(
@@ -311,6 +327,7 @@ export default function ProjectsPage() {
         <ProjectFormModal
           project={editingProject ?? undefined}
           submitting={editingProject ? updatingProject : creatingProject}
+          servers={servers}
           onClose={() => {
             setShowProjectModal(false);
             setEditingProject(null);
