@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ChevronDown,
   Globe2,
   Loader2,
-  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -72,14 +72,11 @@ export default function PanelAccessSettingsPanel({
   const selectedCapability = capabilities?.proxies.find(
     (proxy) => proxy.type === panelProxy,
   );
-  const panelRoutePreview = panelDomain.trim()
-    ? `${panelDomain.trim()} -> ${panelProxy}`
-    : "No custom panel domain configured";
   const canProvision = Boolean(
     panelDomain.trim() &&
-      selectedCapability?.available &&
-      selectedCapability.supportsProvisioning &&
-      !provisioning,
+    selectedCapability?.available &&
+    selectedCapability.supportsProvisioning &&
+    !provisioning,
   );
 
   useEffect(() => {
@@ -140,40 +137,74 @@ export default function PanelAccessSettingsPanel({
   return (
     <div
       className="card"
-      style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}
+      style={{
+        padding: 0,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
       <div
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
-          gap: 12,
+          gap: 16,
           flexWrap: "wrap",
+          padding: "18px 22px",
+          borderBottom: "1px solid var(--border)",
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <h2
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 11,
+            minWidth: 0,
+          }}
+        >
+          {/* <span
             style={{
-              display: "flex",
+              width: 22,
+              height: 22,
+              flexShrink: 0,
+              display: "inline-flex",
               alignItems: "center",
-              gap: 8,
-              fontSize: 15,
-              fontWeight: 700,
-              color: "var(--text-primary)",
+              justifyContent: "center",
+              borderRadius: "50%",
+              background: "var(--accent-blue)",
+              color: "white",
+              fontSize: 11,
+              fontWeight: 800,
             }}
           >
-            <Globe2 size={16} color="var(--accent-green)" />
-            Panel Access
-          </h2>
-          <div
-            style={{
-              marginTop: 5,
-              fontSize: 12,
-              color: "var(--text-muted)",
-              lineHeight: 1.5,
-            }}
-          >
-            Custom domain provisioning for the Doktainer panel
+            1
+          </span> */}
+          <div>
+            <h2
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 15,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+              }}
+            >
+              <Globe2 size={16} color="var(--accent-green)" />
+              Configure Panel Domain
+            </h2>
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: 12,
+                color: "var(--text-muted)",
+                lineHeight: 1.5,
+              }}
+            >
+              Set your panel domain and reverse proxy. Doktainer will handle the
+              rest.
+            </div>
           </div>
         </div>
         <span className="ui-badge badge-info">
@@ -183,154 +214,158 @@ export default function PanelAccessSettingsPanel({
         </span>
       </div>
 
-      {error ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 8,
-            padding: "10px 12px",
-            border: "1px solid rgba(239,68,68,0.28)",
-            borderRadius: 8,
-            background: "rgba(239,68,68,0.1)",
-            color: "#ef4444",
-            fontSize: 12,
-            lineHeight: 1.5,
-          }}
-        >
-          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      {message ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            border: "1px solid rgba(16,185,129,0.28)",
-            borderRadius: 8,
-            background: "rgba(16,185,129,0.1)",
-            color: "#10b981",
-            fontSize: 12,
-            lineHeight: 1.5,
-          }}
-        >
-          {message}
-        </div>
-      ) : null}
-
-      {capabilities?.target.diagnostic ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            border: "1px solid rgba(59,130,246,0.24)",
-            borderRadius: 8,
-            background: "rgba(59,130,246,0.07)",
-            color: "var(--text-secondary)",
-            fontSize: 12,
-            lineHeight: 1.5,
-          }}
-        >
-          {capabilities.target.diagnostic}
-        </div>
-      ) : null}
-
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 16,
+          padding: 22,
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
         }}
       >
-        <div>
-          <FieldLabel>Domain</FieldLabel>
-          <input
-            className="input"
-            placeholder="panel.example.com"
-            value={panelDomain}
-            onChange={(event) => setPanelDomain(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 16,
-          alignItems: "stretch",
-        }}
-      >
-        <div>
-          <FieldLabel>Reverse Proxy</FieldLabel>
+        {error ? (
           <div
-            className="ui-pill-switch"
             style={{
-              border: "1px solid var(--border)",
-              background: "var(--bg-input)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              padding: "10px 12px",
+              border: "1px solid rgba(239,68,68,0.28)",
+              borderRadius: 8,
+              background: "rgba(239,68,68,0.1)",
+              color: "#ef4444",
+              fontSize: 12,
+              lineHeight: 1.5,
             }}
           >
-            {proxyOptions.map((option) => {
-              const active = panelProxy === option.value;
-              const capability = capabilities?.proxies.find(
-                (proxy) => proxy.type === option.value,
-              );
-              const disabled =
-                loadingCapabilities ||
-                !capability?.available ||
-                !capability.supportsProvisioning;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    if (!disabled) setPanelProxy(option.value);
-                  }}
-                  disabled={disabled}
-                  title={capability?.reason ?? undefined}
-                  style={{
-                    minHeight: 34,
-                    flex: "1 1 120px",
-                    border: "none",
-                    borderRadius: 6,
-                    background: active ? "#1d4ed8" : "transparent",
-                    color: disabled
-                      ? "var(--text-muted)"
-                      : active
-                        ? "white"
-                        : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: disabled ? "not-allowed" : "pointer",
-                    opacity: disabled ? 0.55 : 1,
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>{error}</span>
           </div>
-          {selectedCapability?.reason ? (
-            <div
-              style={{
-                marginTop: 7,
-                fontSize: 11,
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
-              {selectedCapability.reason}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
+
+        {message ? (
+          <div
+            style={{
+              padding: "10px 12px",
+              border: "1px solid rgba(16,185,129,0.28)",
+              borderRadius: 8,
+              background: "rgba(16,185,129,0.1)",
+              color: "#10b981",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {message}
+          </div>
+        ) : null}
+
+        {capabilities?.target.diagnostic ? (
+          <div
+            style={{
+              padding: "10px 12px",
+              border: "1px solid rgba(59,130,246,0.24)",
+              borderRadius: 8,
+              background: "rgba(59,130,246,0.07)",
+              color: "var(--text-secondary)",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {capabilities.target.diagnostic}
+          </div>
+        ) : null}
+
         <div
           style={{
-            minHeight: 62,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          <div>
+            <FieldLabel>Domain</FieldLabel>
+            <input
+              className="input"
+              placeholder="panel.example.com"
+              value={panelDomain}
+              onChange={(event) => setPanelDomain(event.target.value)}
+            />
+            <div
+              style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}
+            >
+              Enter the domain used to open the Doktainer panel.
+            </div>
+          </div>
+          <div>
+            <FieldLabel>
+              Reverse Proxy{" "}
+              <span style={{ fontWeight: 500, color: "var(--text-muted)" }}>
+                (Auto Detect)
+              </span>
+            </FieldLabel>
+            <div style={{ position: "relative" }}>
+              <select
+                className="input"
+                value={panelProxy}
+                disabled={loadingCapabilities}
+                onChange={(event) =>
+                  setPanelProxy(event.target.value as PanelAccessProxy)
+                }
+                style={{ width: "100%", appearance: "none", paddingRight: 34 }}
+              >
+                {proxyOptions.map((option) => {
+                  const capability = capabilities?.proxies.find(
+                    (proxy) => proxy.type === option.value,
+                  );
+                  const available =
+                    capability?.available && capability.supportsProvisioning;
+                  return (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                      disabled={!available}
+                    >
+                      {option.label}
+                      {available ? " (Detected)" : " (Unavailable)"}
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown
+                size={15}
+                style={{
+                  position: "absolute",
+                  right: 11,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  color: "var(--text-muted)",
+                }}
+              />
+            </div>
+            {selectedCapability?.reason ? (
+              <div
+                style={{
+                  marginTop: 7,
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                  lineHeight: 1.5,
+                }}
+              >
+                {selectedCapability.reason}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          style={{
+            minHeight: 74,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
-            padding: "11px 12px",
+            gap: 16,
+            padding: "13px 14px",
             border: "1px solid var(--border)",
             borderRadius: 8,
             background: "var(--bg-input)",
@@ -348,7 +383,7 @@ export default function PanelAccessSettingsPanel({
               }}
             >
               <ShieldCheck size={14} color="var(--accent-green)" />
-              Auto SSL
+              HTTPS / SSL
             </div>
             <div
               style={{
@@ -357,7 +392,7 @@ export default function PanelAccessSettingsPanel({
                 color: "var(--text-muted)",
               }}
             >
-              Certbot or proxy-managed TLS
+              Automatically provision SSL certificate
             </div>
           </div>
           <Toggle
@@ -365,66 +400,50 @@ export default function PanelAccessSettingsPanel({
             onChange={() => setPanelAutoSsl((current) => !current)}
           />
         </div>
-      </div>
-      {capabilities?.autoSsl.reason ? (
-        <div
-          style={{
-            marginTop: -8,
-            fontSize: 11,
-            color: "var(--text-muted)",
-            lineHeight: 1.5,
-          }}
-        >
-          {capabilities.autoSsl.reason}
-        </div>
-      ) : null}
+        {capabilities?.autoSsl.reason ? (
+          <div
+            style={{
+              marginTop: -8,
+              fontSize: 11,
+              color: "var(--text-muted)",
+              lineHeight: 1.5,
+            }}
+          >
+            {capabilities.autoSsl.reason}
+          </div>
+        ) : null}
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          padding: "12px 14px",
-          border: "1px solid rgba(59,130,246,0.24)",
-          borderRadius: 8,
-          background: "rgba(59,130,246,0.07)",
-        }}
-      >
         <div
           style={{
             display: "flex",
+            justifyContent: "flex-end",
             alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-            color: "var(--text-secondary)",
-            fontSize: 12,
+            gap: 12,
+            flexWrap: "wrap",
+            paddingTop: 2,
           }}
         >
-          <RefreshCw size={14} color="var(--accent-blue)" />
-          <span>{panelRoutePreview}</span>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!canProvision}
+            onClick={() => void provisionPanelDomain()}
+            style={{
+              minWidth: 164,
+              opacity: canProvision ? 1 : 0.55,
+              cursor: canProvision ? "pointer" : "not-allowed",
+            }}
+          >
+            {provisioning ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Provisioning
+              </>
+            ) : (
+              "Configure Domain"
+            )}
+          </button>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!canProvision}
-          onClick={() => void provisionPanelDomain()}
-          style={{
-            minWidth: 168,
-            opacity: canProvision ? 1 : 0.55,
-            cursor: canProvision ? "pointer" : "not-allowed",
-          }}
-        >
-          {provisioning ? (
-            <>
-              <Loader2 size={14} className="animate-spin" />
-              Provisioning
-            </>
-          ) : (
-            "Provision Panel Domain"
-          )}
-        </button>
       </div>
     </div>
   );
