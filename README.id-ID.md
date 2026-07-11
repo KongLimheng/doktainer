@@ -54,6 +54,32 @@ Untuk memulai, jalankan perintah berikut di VPS:
 curl -sSL https://doktainer.com/install.sh | sh
 ```
 
+Untuk update:
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | sh -s -- update
+```
+
+Untuk update spesifik versi:
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | DOKTAINER_VERSION=v0.1.4 sh -s -- update
+```
+
+Atau jika menggunakan image registry:
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | \
+  DOKTAINER_IMAGE=ghcr.io/organisasi/doktainer:v0.1.4 sh -s -- update
+```
+
+Sebelum update, sangat direkomendasikan untuk melakukan backup konfigurasi:
+
+```bash
+cp /etc/doktainer/.env.docker /etc/doktainer/.env.docker.backup
+cp /etc/doktainer/docker-compose.yml /etc/doktainer/docker-compose.yml.backup
+```
+
 ## Mulai Cepat (Lokal)
 
 ### Clone repositori

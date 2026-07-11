@@ -54,6 +54,32 @@ To get started, run the following command on a VPS:
 curl -sSL https://doktainer.com/install.sh | sh
 ```
 
+For Update
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | sh -s -- update
+```
+
+To update to a specific version:
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | DOKTAINER_VERSION=v0.1.4 sh -s -- update
+```
+
+Or if using a dedicated image registry:
+
+```bash
+curl -fsSL https://doktainer.com/install.sh | \
+  DOKTAINER_IMAGE=ghcr.io/organisasi/doktainer:v0.1.4 sh -s -- update
+```
+
+Before updating, it is recommended to back up the configuration:
+
+```bash
+cp /etc/doktainer/.env.docker /etc/doktainer/.env.docker.backup
+cp /etc/doktainer/docker-compose.yml /etc/doktainer/docker-compose.yml.backup
+```
+
 ## Local Quick Start
 
 ### Clone the repository
