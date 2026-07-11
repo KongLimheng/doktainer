@@ -237,14 +237,15 @@ export default function SettingsPage() {
       const refreshed = await settingsApi.get();
       syncSettingsFromServer(refreshed.data, { preserveStoredTheme: true });
       setSuccess(
-        response.message || "Scan QR code lalu verifikasi dengan kode 6 digit",
+        response.message ||
+          "Scan the QR code, then verify using the 6-digit code.",
       );
     });
   };
 
   const enableTwoFactor = async () => {
     if (twoFactorCode.length !== 6) {
-      setError("Masukkan 6 digit authentication code");
+      setError("Enter the 6-digit authentication code.");
       return;
     }
 
@@ -263,7 +264,7 @@ export default function SettingsPage() {
       disableTwoFactorForm.code.length !== 6
     ) {
       setError(
-        "Masukkan current password dan 6 digit code untuk menonaktifkan 2FA",
+        "Enter your current password and the 6-digit code to disable 2FA.",
       );
       return;
     }
