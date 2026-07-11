@@ -1,10 +1,16 @@
 import { execFile } from "node:child_process";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
+import { PassThrough } from "node:stream";
 import { promisify } from "node:util";
+import Dockerode from "dockerode";
 import yaml from "js-yaml";
 
 const execFileAsync = promisify(execFile);
 const PANEL_PROBE_TIMEOUT_MS = 12000;
+const PANEL_HOST_ROOT = (process.env.PANEL_HOST_ROOT || "").replace(/\/+$/, "");
+const PANEL_HOST_EXECUTION = process.env.PANEL_ACCESS_HOST_EXECUTION === "1";
+const PANEL_PROXY_NETWORK = process.env.PANEL_PROXY_NETWORK || "doktainer-proxy";
+const DOCKER_SOCKET_PATH = process.env.DOCKER_SOCKET_PATH || "/var/run/docker.sock";
 
 export type PanelProxyType = "NGINX" | "CADDY" | "TRAEFIK";
 
@@ -28,7 +34,7 @@ export type PanelAccessCapabilities = {
   defaultProxy: PanelProxyType | null;
   upstream: string;
   target: {
-    type: "local";
+    type: "local" | "docker-bridge";
     label: string;
     serverId: null;
     diagnostic: string | null;
@@ -76,6 +82,17 @@ type PanelHostStackProbe = {
   error: string | null;
 };
 
+type DockerProxyProbe = {
+  installed: boolean;
+  active: boolean;
+  configMounted: boolean;
+  containerName: string | null;
+  containerId: string | null;
+  error: string | null;
+};
+
+type DockerProxyStackProbe = Record<Lowercase<PanelProxyType>, DockerProxyProbe>;
+
 function isUnixLikeHost() {
   return process.platform !== "win32";
 }
@@ -83,9 +100,16 @@ function isUnixLikeHost() {
 function isLikelyContainerRuntime() {
   return Boolean(
     process.env.DOCKER_CONTAINER ||
-      process.env.KUBERNETES_SERVICE_HOST ||
-      process.env.HOSTNAME,
+    process.env.KUBERNETES_SERVICE_HOST ||
+    existsSync("/.dockerenv") ||
+    PANEL_HOST_ROOT,
   );
+}
+
+function panelHostPath(path: string) {
+  return PANEL_HOST_ROOT && path.startsWith("/")
+    ? `${PANEL_HOST_ROOT}${path}`
+    : path;
 }
 
 function resolvePanelUpstream() {
@@ -126,7 +150,11 @@ async function runLocalShell(
   }
 
   try {
-    const result = await execFileAsync("/bin/sh", ["-lc", command], {
+    const executable = PANEL_HOST_EXECUTION ? "nsenter" : "/bin/sh";
+    const args = PANEL_HOST_EXECUTION
+      ? ["--target", "1", "--mount", "--uts", "--ipc", "--net", "--pid", "--", "/bin/sh", "-lc", command]
+      : ["-lc", command];
+    const result = await execFileAsync(executable, args, {
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024,
     });
@@ -214,6 +242,9 @@ async function probePanelHostStack(): Promise<PanelHostStackProbe> {
 
 function localRuntimeDiagnostic(probe: PanelHostStackProbe) {
   if (probe.error) return probe.error;
+  if (PANEL_HOST_EXECUTION && PANEL_HOST_ROOT) {
+    return "Panel Access is using the explicitly configured host integration.";
+  }
   if (!isLikelyContainerRuntime()) {
     return null;
   }
@@ -290,13 +321,54 @@ function inspectProxy(
   };
 }
 
+function inspectDockerBridgeProxy(
+  type: PanelProxyType,
+  probe: DockerProxyProbe,
+): PanelProxyCapability {
+  const label = type === "NGINX" ? "Nginx" : type === "CADDY" ? "Caddy" : "Traefik";
+  const installed = probe.installed;
+  const active = probe.active;
+  const supportsProvisioning = installed && active && probe.configMounted;
+  const containerLabel = probe.containerName ? ` (${probe.containerName})` : "";
+
+  return {
+    type,
+    label,
+    installed,
+    active,
+    available: installed && active,
+    supportsProvisioning,
+    reason: probe.error
+      ? `Docker bridge inspection failed: ${probe.error}`
+      : !installed
+        ? `No ${label} container was found on Docker network ${PANEL_PROXY_NETWORK}.`
+        : !active
+          ? `${label} container${containerLabel} is not running.`
+          : !probe.configMounted
+            ? `${label} container${containerLabel} is active, but its /etc configuration directory is not mounted as a persistent managed volume.`
+            : null,
+  };
+}
+
 export async function getPanelAccessCapabilities(): Promise<PanelAccessCapabilities> {
   const probe = await probePanelHostStack();
-  const proxies = [
+  const localProxies = [
     inspectProxy("NGINX", probe),
     inspectProxy("CADDY", probe),
     inspectProxy("TRAEFIK", probe),
   ];
+  const dockerProbe = await probeDockerBridgeProxyStack();
+  const dockerProxies = [
+    inspectDockerBridgeProxy("NGINX", dockerProbe.nginx),
+    inspectDockerBridgeProxy("CADDY", dockerProbe.caddy),
+    inspectDockerBridgeProxy("TRAEFIK", dockerProbe.traefik),
+  ];
+  const dockerBridgeError = dockerProxies.find((proxy) =>
+    proxy.reason?.startsWith("Docker bridge inspection failed:"),
+  )?.reason;
+  const useDockerBridge =
+    dockerProxies.some((proxy) => proxy.installed) || Boolean(dockerBridgeError);
+  const proxies = useDockerBridge ? dockerProxies : localProxies;
   const defaultProxy =
     proxies.find((proxy) => proxy.available && proxy.supportsProvisioning)
       ?.type ?? null;
@@ -314,10 +386,12 @@ export async function getPanelAccessCapabilities(): Promise<PanelAccessCapabilit
     defaultProxy,
     upstream: resolvePanelUpstream(),
     target: {
-      type: "local",
-      label: "Panel host",
+      type: useDockerBridge ? "docker-bridge" : "local",
+      label: useDockerBridge ? `Docker bridge: ${PANEL_PROXY_NETWORK}` : "Panel host",
       serverId: null,
-      diagnostic: localRuntimeDiagnostic(probe),
+      diagnostic: useDockerBridge
+        ? dockerBridgeError || "Proxy containers are detected through the Docker bridge and use their persistent configuration mount for provisioning."
+        : localRuntimeDiagnostic(probe),
     },
   };
 }
@@ -406,10 +480,167 @@ function buildTraefikPanelConfig(domain: string, upstream: string) {
 }
 
 async function writeFileEnsuringDir(filePath: string, content: string) {
-  await fs.mkdir(filePath.replace(/\/[^/]+$/, "") || "/", {
+  const hostFilePath = panelHostPath(filePath);
+  await fs.mkdir(hostFilePath.replace(/\/[^/]+$/, "") || "/", {
     recursive: true,
   });
-  await fs.writeFile(filePath, content, "utf8");
+  await fs.writeFile(hostFilePath, content, "utf8");
+}
+
+function emptyDockerProxyProbe(error: string | null): DockerProxyProbe {
+  return {
+    installed: false,
+    active: false,
+    configMounted: false,
+    containerName: null,
+    containerId: null,
+    error,
+  };
+}
+
+function proxyMatchesContainer(type: PanelProxyType, name: string, image: string) {
+  const haystack = `${name} ${image}`.toLowerCase();
+  return type === "NGINX"
+    ? /(^|[/:_-])nginx(?:[/:_-]|$)/.test(haystack)
+    : type === "CADDY"
+      ? /(^|[/:_-])caddy(?:[/:_-]|$)/.test(haystack)
+      : /(^|[/:_-])traefik(?:[/:_-]|$)/.test(haystack);
+}
+
+function proxyConfigMounts(type: PanelProxyType, mounts: Array<{ Destination?: string }>) {
+  const paths = type === "NGINX"
+    ? ["/etc/nginx", "/etc/nginx/conf.d"]
+    : type === "CADDY"
+      ? ["/etc/caddy"]
+      : ["/etc/traefik", "/etc/traefik/dynamic"];
+  return mounts.some((mount) => paths.some((path) => mount.Destination === path));
+}
+
+async function probeDockerBridgeProxyStack(): Promise<DockerProxyStackProbe> {
+  const unavailable = (): DockerProxyStackProbe => ({
+    nginx: emptyDockerProxyProbe(null),
+    caddy: emptyDockerProxyProbe(null),
+    traefik: emptyDockerProxyProbe(null),
+  });
+
+  if (!existsSync(DOCKER_SOCKET_PATH)) return unavailable();
+
+  try {
+    const docker = new Dockerode({ socketPath: DOCKER_SOCKET_PATH });
+    const containers = await docker.listContainers({ all: true });
+    const result = unavailable();
+
+    for (const type of ["NGINX", "CADDY", "TRAEFIK"] as const) {
+      const container = containers.find((candidate) => {
+        const name = candidate.Names?.[0]?.replace(/^\//, "") || "";
+        const onProxyNetwork = Boolean(candidate.NetworkSettings?.Networks?.[PANEL_PROXY_NETWORK]);
+        return onProxyNetwork && proxyMatchesContainer(type, name, candidate.Image || "");
+      });
+      if (!container) continue;
+
+      const details = await docker.getContainer(container.Id).inspect();
+      const key = type.toLowerCase() as Lowercase<PanelProxyType>;
+      result[key] = {
+        installed: true,
+        active: container.State === "running",
+        configMounted: proxyConfigMounts(type, details.Mounts || []),
+        containerName: container.Names?.[0]?.replace(/^\//, "") || container.Id.slice(0, 12),
+        containerId: container.Id,
+        error: null,
+      };
+    }
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to inspect Docker proxy containers.";
+    return {
+      nginx: emptyDockerProxyProbe(message),
+      caddy: emptyDockerProxyProbe(message),
+      traefik: emptyDockerProxyProbe(message),
+    };
+  }
+}
+
+async function runDockerContainerShell(
+  containerId: string,
+  command: string,
+  timeoutMs = 20000,
+): Promise<ShellResult> {
+  try {
+    const docker = new Dockerode({ socketPath: DOCKER_SOCKET_PATH });
+    const execution = await docker.getContainer(containerId).exec({
+      AttachStdout: true,
+      AttachStderr: true,
+      Cmd: ["/bin/sh", "-lc", command],
+    });
+    const stream = await execution.start({ hijack: true, stdin: false });
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const output = { stdout: "", stderr: "" };
+    stdout.on("data", (chunk: Buffer) => { output.stdout += chunk.toString(); });
+    stderr.on("data", (chunk: Buffer) => { output.stderr += chunk.toString(); });
+    docker.modem.demuxStream(stream, stdout, stderr);
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        stream.destroy(new Error("Container command timed out."));
+      }, timeoutMs);
+      stream.once("end", () => { clearTimeout(timeout); resolve(); });
+      stream.once("error", (error) => { clearTimeout(timeout); reject(error); });
+    });
+
+    const details = await execution.inspect();
+    return { stdout: output.stdout, stderr: output.stderr, code: details.ExitCode ?? 1 };
+  } catch (error) {
+    return {
+      stdout: "",
+      stderr: error instanceof Error ? error.message : "Unable to execute command in proxy container.",
+      code: 1,
+    };
+  }
+}
+
+function base64Content(content: string) {
+  return Buffer.from(content, "utf8").toString("base64");
+}
+
+async function provisionDockerProxy(
+  type: PanelProxyType,
+  probe: DockerProxyProbe,
+  domain: string,
+  upstream: string,
+) {
+  if (!probe.containerId) throw new PanelAccessError(`${type} container is unavailable.`);
+  const safeName = `doktainer-panel-${sanitizeFileName(domain)}`;
+  const config = type === "NGINX"
+    ? buildNginxPanelConfig(domain, upstream)
+    : type === "CADDY"
+      ? buildCaddyPanelConfig(domain, upstream)
+      : buildTraefikPanelConfig(domain, upstream);
+  const configPath = type === "NGINX"
+    ? `/etc/nginx/conf.d/${safeName}.conf`
+    : type === "CADDY"
+      ? `/etc/caddy/${safeName}.caddy`
+      : `/etc/traefik/dynamic/${safeName}.yml`;
+  const write = `printf %s '${base64Content(config)}' | base64 -d > '${configPath}'`;
+
+  const command = type === "NGINX"
+    ? `mkdir -p /etc/nginx/conf.d && ${write} && nginx -t && (nginx -s reload || kill -HUP 1)`
+    : type === "CADDY"
+      ? `mkdir -p /etc/caddy && ${write} && touch /etc/caddy/Caddyfile && { grep -Fqx 'import /etc/caddy/${safeName}.caddy' /etc/caddy/Caddyfile || printf '\nimport /etc/caddy/${safeName}.caddy\n' >> /etc/caddy/Caddyfile; } && caddy validate --config /etc/caddy/Caddyfile && caddy reload --config /etc/caddy/Caddyfile`
+      : `test -d /etc/traefik/dynamic && grep -Eq '^[[:space:]]*file:' /etc/traefik/traefik.yml /etc/traefik/traefik.yaml 2>/dev/null && ${write}`;
+  const result = await runDockerContainerShell(probe.containerId, command, 30000);
+  if (result.code !== 0) {
+    throw new PanelAccessError(
+      `${type} container provisioning failed: ${(result.stderr || result.stdout).trim()}`,
+    );
+  }
+
+  return {
+    configPath,
+    enabledPath: configPath,
+    reloadTarget: probe.containerName || type.toLowerCase(),
+  };
 }
 
 async function provisionNginx(domain: string, upstream: string) {
@@ -418,13 +649,13 @@ async function provisionNginx(domain: string, upstream: string) {
   const enabledPath = `/etc/nginx/sites-enabled/${safeName}.conf`;
 
   await writeFileEnsuringDir(configPath, buildNginxPanelConfig(domain, upstream));
-  await fs.rm(enabledPath, { force: true }).catch(() => undefined);
-  await fs.symlink(configPath, enabledPath);
+  await fs.rm(panelHostPath(enabledPath), { force: true }).catch(() => undefined);
+  await fs.symlink(configPath, panelHostPath(enabledPath));
 
   const test = await runLocalShell("nginx -t", 20000);
   if (test.code !== 0) {
-    await fs.rm(enabledPath, { force: true }).catch(() => undefined);
-    await fs.rm(configPath, { force: true }).catch(() => undefined);
+    await fs.rm(panelHostPath(enabledPath), { force: true }).catch(() => undefined);
+    await fs.rm(panelHostPath(configPath), { force: true }).catch(() => undefined);
     throw new PanelAccessError(
       `Nginx validation failed: ${(test.stderr || test.stdout).trim()}`,
     );
@@ -446,11 +677,11 @@ async function provisionNginx(domain: string, upstream: string) {
 async function provisionCaddy(domain: string, upstream: string) {
   const configPath = `/etc/caddy/conf.d/doktainer-panel-${sanitizeFileName(domain)}.caddy`;
   const caddyFilePath = "/etc/caddy/Caddyfile";
-  const caddyFile = await fs.readFile(caddyFilePath, "utf8").catch(() => "");
+  const caddyFile = await fs.readFile(panelHostPath(caddyFilePath), "utf8").catch(() => "");
 
   if (caddyFile && !/import\s+\/etc\/caddy\/conf\.d\/\*\.caddy/.test(caddyFile)) {
     await fs.writeFile(
-      caddyFilePath,
+      panelHostPath(caddyFilePath),
       `${caddyFile.trimEnd()}\n\nimport /etc/caddy/conf.d/*.caddy\n`,
       "utf8",
     );
@@ -495,7 +726,7 @@ async function provisionTraefik(domain: string, upstream: string) {
 
 async function ensureTraefikFileProvider() {
   const dynamicDirectory = "/etc/traefik/dynamic";
-  await fs.mkdir(dynamicDirectory, { recursive: true });
+  await fs.mkdir(panelHostPath(dynamicDirectory), { recursive: true });
 
   const staticCandidates = [
     "/etc/traefik/traefik.yml",
@@ -505,7 +736,7 @@ async function ensureTraefikFileProvider() {
     await Promise.all(
       staticCandidates.map(async (candidate) => ({
         path: candidate,
-        content: await fs.readFile(candidate, "utf8").catch(() => null),
+        content: await fs.readFile(panelHostPath(candidate), "utf8").catch(() => null),
       })),
     )
   ).find((candidate) => candidate.content !== null);
@@ -540,7 +771,7 @@ async function ensureTraefikFileProvider() {
     };
 
     await fs.writeFile(
-      staticConfigPath.path,
+      panelHostPath(staticConfigPath.path),
       yaml.dump(parsed, { lineWidth: 120 }),
       "utf8",
     );
@@ -556,6 +787,9 @@ export async function provisionPanelDomain(options: {
 }): Promise<PanelProvisionResult> {
   const domain = normalizePanelDomain(options.domain);
   const capabilities = await getPanelAccessCapabilities();
+  const dockerProbe = await probeDockerBridgeProxyStack();
+  const dockerProxy = dockerProbe[options.proxy.toLowerCase() as Lowercase<PanelProxyType>];
+  const usingDockerBridge = Boolean(dockerProxy?.installed);
   const selectedProxy = capabilities.proxies.find(
     (proxy) => proxy.type === options.proxy,
   );
@@ -566,27 +800,56 @@ export async function provisionPanelDomain(options: {
     );
   }
 
+  if (options.autoSsl && options.proxy === "TRAEFIK") {
+    throw new PanelAccessError(
+      "Auto SSL with Traefik requires a configured certificate resolver and is not supported by Panel Access yet.",
+    );
+  }
+
+  if (usingDockerBridge && options.autoSsl && options.proxy === "NGINX") {
+    throw new PanelAccessError(
+      "Auto SSL for an Nginx container requires a dedicated certificate container or mounted Certbot workflow. Provision the HTTP domain first, or use Caddy for automatic TLS.",
+    );
+  }
+
   const upstream = resolvePanelUpstream();
-  const result =
-    options.proxy === "NGINX"
+  const result = usingDockerBridge
+    ? await provisionDockerProxy(options.proxy, dockerProxy, domain, upstream)
+    : options.proxy === "NGINX"
       ? await provisionNginx(domain, upstream)
       : options.proxy === "CADDY"
         ? await provisionCaddy(domain, upstream)
         : await provisionTraefik(domain, upstream);
 
-  const sslNote =
-    options.autoSsl && !capabilities.autoSsl.available
-      ? " Auto SSL was requested, but Certbot was not detected; proxy config was provisioned without issuing a certificate."
-      : "";
+  let sslEnabled = false;
+  let sslNote = "";
+
+  if (options.autoSsl && options.proxy === "CADDY") {
+    sslEnabled = true;
+  } else if (options.autoSsl && options.proxy === "NGINX") {
+    if (!capabilities.autoSsl.installed) {
+      sslNote = " Auto SSL was requested, but Certbot was not detected; the HTTP proxy config was provisioned without issuing a certificate.";
+    } else {
+      const certificate = await runLocalShell(
+        `certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d ${domain}`,
+        120000,
+      );
+      if (certificate.code === 0) {
+        sslEnabled = true;
+      } else {
+        sslNote = ` Auto SSL could not be issued; the HTTP proxy config remains active. ${(certificate.stderr || certificate.stdout).trim()}`;
+      }
+    }
+  }
 
   return {
     domain,
-    panelUrl: `${options.autoSsl ? "https" : "http"}://${domain}`,
+    panelUrl: `${sslEnabled ? "https" : "http"}://${domain}`,
     proxy: options.proxy,
     configPath: result.configPath,
     enabledPath: result.enabledPath,
     reloadTarget: result.reloadTarget,
-    sslEnabled: options.autoSsl && capabilities.autoSsl.available,
+    sslEnabled,
     message: `Panel domain ${domain} was provisioned through ${selectedProxy.label}.${sslNote}`,
   };
 }

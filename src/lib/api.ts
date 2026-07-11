@@ -407,7 +407,7 @@ export interface PanelAccessCapabilities {
   defaultProxy: PanelAccessProxy | null;
   upstream: string;
   target: {
-    type: "local";
+    type: "local" | "docker-bridge";
     label: string;
     serverId: null;
     diagnostic: string | null;
