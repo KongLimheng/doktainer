@@ -242,7 +242,7 @@ export default function PanelAccessSettingsPanel({
           </div>
         ) : null}
 
-        {message ? (
+        {/* {message ? (
           <div
             style={{
               padding: "10px 12px",
@@ -256,7 +256,7 @@ export default function PanelAccessSettingsPanel({
           >
             {message}
           </div>
-        ) : null}
+        ) : null} */}
 
         {capabilities?.target.diagnostic ? (
           <div
