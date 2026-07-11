@@ -787,6 +787,46 @@ function getInspectWorkingDir(inspect: unknown) {
   return null;
 }
 
+export function getProjectEnvRuntimeCandidatePaths(
+  inspect: unknown,
+  mounts: DockerInspectMount[],
+  processWorkingDirs: string[] = [],
+) {
+  const candidates = new Set<string>();
+  const workingDir = getInspectWorkingDir(inspect);
+
+  processWorkingDirs.forEach((path) => {
+    if (isUsableMountPath(path)) {
+      candidates.add(pathPosix.join(normalizeRemotePath(path), ".env"));
+    }
+  });
+
+  if (workingDir) {
+    candidates.add(pathPosix.join(normalizeRemotePath(workingDir), ".env"));
+  }
+
+  mounts.forEach((mount) => {
+    if (isUsableMountPath(mount.Destination)) {
+      candidates.add(
+        pathPosix.join(normalizeRemotePath(mount.Destination!), ".env"),
+      );
+    }
+  });
+
+  [
+    "/app",
+    "/workspace",
+    "/var/www/html",
+    "/bitnami/laravel",
+    "/laravel/laravel",
+    "/srv/app",
+  ].forEach((path) => {
+    candidates.add(pathPosix.join(path, ".env"));
+  });
+
+  return Array.from(candidates).slice(0, 12);
+}
+
 function redactSecret(message: string, secret?: string | null) {
   if (!secret) return message;
   return message.split(secret).join("[REDACTED]");
@@ -1967,8 +2007,9 @@ export async function containerRoutes(app: FastifyInstance) {
       const runtimeId = container.dockerId || container.name;
 
       try {
-        const containerCandidatePaths = new Set<string>();
+        const checkedContainerPaths: string[] = [];
         let inspect: unknown = null;
+        const processWorkingDirs: string[] = [];
         let projectMounts = parseStoredVolumeMounts(container.volumes);
 
         try {
@@ -1977,27 +2018,57 @@ export async function containerRoutes(app: FastifyInstance) {
           // Keep stored deployment candidates and common fallback paths.
         }
 
-        if (inspect) {
-          projectMounts = [...getInspectMounts(inspect), ...projectMounts];
-          const workingDir = getInspectWorkingDir(inspect);
-          if (workingDir) {
-            containerCandidatePaths.add(pathPosix.join(workingDir, ".env"));
+        if (container.status === "RUNNING") {
+          const mainProcessWorkingDir =
+            await ssh.getContainerMainProcessWorkingDirectory(
+              container.server,
+              runtimeId,
+            );
+
+          if (mainProcessWorkingDir) {
+            processWorkingDirs.push(mainProcessWorkingDir);
           }
         }
 
-        projectMounts.forEach((mount) => {
-          if (isUsableMountPath(mount.Destination)) {
-            containerCandidatePaths.add(
-              pathPosix.join(normalizeRemotePath(mount.Destination!), ".env"),
-            );
+        if (inspect) {
+          projectMounts = [...getInspectMounts(inspect), ...projectMounts];
+        }
+
+        const containerCandidatePaths = getProjectEnvRuntimeCandidatePaths(
+          inspect,
+          projectMounts,
+          processWorkingDirs,
+        );
+
+        if (container.status === "RUNNING") {
+          for (const candidatePath of containerCandidatePaths) {
+            checkedContainerPaths.push(candidatePath);
+            try {
+              const file = await ssh.readContainerFile(
+                container.server,
+                runtimeId,
+                candidatePath,
+              );
+
+              return reply.send({
+                success: true,
+                data: {
+                  found: true,
+                  path: file.path,
+                  content: file.content,
+                  checkedPaths: checkedContainerPaths,
+                  source: "container",
+                  message:
+                    "Project .env file loaded from the active container filesystem.",
+                },
+              });
+            } catch {
+              // Try the next runtime project path.
+            }
           }
-        });
+        }
 
-        containerCandidatePaths.add("/app/.env");
-        containerCandidatePaths.add("/workspace/.env");
-        containerCandidatePaths.add("/var/www/html/.env");
-
-        const mountCandidatePaths = Array.from(containerCandidatePaths)
+        const mountCandidatePaths = containerCandidatePaths
           .map((path) =>
             resolveContainerPathToHostMountPath(path, projectMounts),
           )
@@ -2020,46 +2091,11 @@ export async function containerRoutes(app: FastifyInstance) {
           });
         }
 
-        const checkedContainerPaths: string[] = [];
-        if (container.status === "RUNNING") {
-          for (const candidatePath of containerCandidatePaths) {
-            checkedContainerPaths.push(candidatePath);
-            try {
-              const file = await ssh.readContainerFile(
-                container.server,
-                runtimeId,
-                candidatePath,
-              );
-
-              return reply.send({
-                success: true,
-                data: {
-                  found: true,
-                  path: file.path,
-                  content: file.content,
-                  checkedPaths: [
-                    ...data.checkedPaths,
-                    ...checkedContainerPaths,
-                  ],
-                  source: "container",
-                  message:
-                    "Project .env file loaded from container filesystem.",
-                },
-              });
-            } catch {
-              // Try the next common app path.
-            }
-          }
-        }
-
         return reply.send({
           success: true,
           data: {
             ...data,
-            checkedPaths: [
-              ...data.checkedPaths,
-              ...checkedContainerPaths,
-            ],
+            checkedPaths: [...data.checkedPaths, ...checkedContainerPaths],
             source: "missing",
             message:
               "No project .env file was found at the checked deployment, mounted project, or container paths.",

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   clearContainerMetricsCacheForTest,
+  getProjectEnvRuntimeCandidatePaths,
   invalidateContainerMetricsCache,
   parseStoredVolumeMounts,
   readContainerMetricsWithCache,
@@ -173,4 +174,43 @@ test("project env path resolver can use stored container volume bindings", () =>
     "/srv/laravel/.env",
   );
   assert.equal(mounts[0]?.Destination, "/bitnami/laravel");
+});
+
+test("project env runtime candidates prefer inspect paths before common fallbacks", () => {
+  const mounts = parseStoredVolumeMounts([
+    "/srv/project:/runtime/project",
+  ]);
+  const paths = getProjectEnvRuntimeCandidatePaths(
+    {
+      Config: {
+        WorkingDir: "/runtime/project",
+      },
+    },
+    mounts,
+  );
+
+  assert.deepEqual(paths.slice(0, 4), [
+    "/runtime/project/.env",
+    "/app/.env",
+    "/workspace/.env",
+    "/var/www/html/.env",
+  ]);
+});
+
+test("project env runtime candidates prefer the main process working directory", () => {
+  const paths = getProjectEnvRuntimeCandidatePaths(
+    {
+      Config: {
+        WorkingDir: "/image/default",
+      },
+    },
+    [],
+    ["/app"],
+  );
+
+  assert.deepEqual(paths.slice(0, 3), [
+    "/app/.env",
+    "/image/default/.env",
+    "/workspace/.env",
+  ]);
 });

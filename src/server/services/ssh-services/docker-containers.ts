@@ -1140,6 +1140,35 @@ export async function listContainerFiles(
   };
 }
 
+export async function getContainerMainProcessWorkingDirectory(
+  server: Server,
+  containerId: string,
+): Promise<string | null> {
+  const script = [
+    'CWD=$(readlink -f /proc/1/cwd 2>/dev/null || true)',
+    'if [ -z "$CWD" ] || [ ! -d "$CWD" ]; then exit 0; fi',
+    'CWD_B64=$(printf "%s" "$CWD" | base64 | tr -d "\\n")',
+    'printf "__CWD__\t%s\n" "$CWD_B64"',
+  ].join("\n");
+
+  try {
+    const stdout = await execContainerShell(
+      server,
+      containerId,
+      script,
+      DOCKER_FILE_LIST_TIMEOUT_MS,
+    );
+    const line = stdout
+      .split("\n")
+      .find((entry) => entry.startsWith("__CWD__\t"));
+    const encodedPath = line?.split("\t")[1];
+
+    return encodedPath ? decodeBase64Value(encodedPath) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function readContainerFile(
   server: Server,
   containerId: string,
